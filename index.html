@@ -1,334 +1,66 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>双色球机选助手</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: #f8fafc; }
-        .ball { 
-            width: 2.5rem; height: 2.5rem; 
-            display: flex; align-items: center; justify-content: center; 
-            border-radius: 9999px; font-weight: 600; font-size: 1.125rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
-        }
-        .ball.empty { background-color: #f1f5f9; color: #cbd5e1; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); border: 1px dashed #cbd5e1; }
-        .ball.red { background-color: #FF3939; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-        .ball.blue { background-color: #5552F2; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-        
-        /* Custom bounce animation: exactly 3 times */
-        @keyframes bounce-3 {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-25%); }
-        }
-        .animate-bounce-3 {
-            animation: bounce-3 0.4s ease-in-out 3;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #E63946 0%, #d62828 100%);
-            transition: transform 0.1s, box-shadow 0.1s;
-        }
-        .btn-primary:active { transform: scale(0.96); box-shadow: none; }
-        .btn-bet {
-            background: linear-gradient(135deg, #1D3557 0%, #457b9d 100%);
-        }
-
-        .history-item { transition: all 0.3s ease; }
-        .delete-btn { width: 0; opacity: 0; overflow: hidden; transition: all 0.3s ease; }
-        .edit-mode .delete-btn { width: 2.5rem; opacity: 1; }
-        .edit-mode .history-content { transform: translateX(0); }
-        
-        /* 滚动条隐藏但可滚动 */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    </style>
-</head>
-<body class="text-slate-800 h-screen flex flex-col max-w-md mx-auto bg-white shadow-xl relative overflow-hidden">
-
-    <!-- Header & Countdown -->
-    <header class="bg-white px-5 pt-8 pb-4 border-b border-slate-100 z-10 shadow-sm relative">
-        <div class="flex items-center justify-between mb-2">
-            <h1 class="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <i data-lucide="gem" class="w-6 h-6 text-red-500"></i> 双色球必中
-            </h1>
-            <div class="text-xs font-medium px-2 py-1 bg-slate-100 rounded-md text-slate-500 flex items-center gap-1">
-                <i data-lucide="calendar" class="w-3 h-3"></i> <span id="nextDrawDate">--</span>
-            </div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>双色球选号</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="app-header">
+        <div class="brand">
+          <h1>双色球选号</h1>
         </div>
-        <div class="bg-slate-800 rounded-xl p-4 text-white flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
-            <div class="absolute -right-4 -top-4 w-24 h-24 bg-white opacity-5 rounded-full blur-xl"></div>
-            <p class="text-sm text-slate-300 mb-1">距离下期开奖还有</p>
-            <div class="text-3xl font-bold tracking-wider font-mono" id="countdown">-- : -- : --</div>
+        <div class="date-pill" aria-label="当前日期">
+          <span class="calendar-icon" aria-hidden="true"></span>
+          <span id="dateLabel">0000-00-00 星期一</span>
         </div>
-    </header>
+      </header>
 
-    <!-- Generator Section -->
-    <section class="p-5 flex flex-col items-center bg-white z-10 border-b border-slate-100">
-        <div class="flex gap-2 mb-8" id="ballContainer">
-            <!-- Balls injected by JS -->
-            <div class="ball empty"></div><div class="ball empty"></div><div class="ball empty"></div>
-            <div class="ball empty"></div><div class="ball empty"></div><div class="ball empty"></div>
-            <div class="ball empty ml-2 border-slate-300"></div>
-        </div>
-        
-        <button id="mainBtn" class="btn-primary w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg shadow-red-500/30 flex items-center justify-center gap-2">
-            <i data-lucide="dices" class="w-5 h-5"></i> <span>必 中</span>
+      <section class="hero-card" aria-label="AI选号">
+        <div class="generator-balls" id="generatorBalls"></div>
+        <button class="ai-button" id="aiPickBtn" type="button">
+          AI选号
         </button>
-    </section>
+      </section>
 
-    <!-- History Section -->
-    <section class="flex-1 flex flex-col bg-slate-50 overflow-hidden">
-        <div class="flex items-center justify-between px-5 py-4 bg-white border-b border-slate-100 sticky top-0 z-20">
-            <h2 class="font-bold text-slate-700 flex items-center gap-2">
-                <i data-lucide="history" class="w-4 h-4 text-slate-400"></i> 历史投注
-            </h2>
-            <button id="editBtn" class="text-sm text-slate-500 font-medium flex items-center gap-1 px-2 py-1 bg-slate-100 rounded hover:bg-slate-200 transition">
-                <i data-lucide="trash-2" class="w-3 h-3"></i> <span id="editBtnText">删除</span>
-            </button>
+      <section class="white-card current-card" aria-labelledby="currentTitle">
+        <div class="section-head">
+          <h2 id="currentTitle">本期投注</h2>
         </div>
-        
-        <div id="historyList" class="flex-1 overflow-y-auto no-scrollbar p-3 space-y-3">
-            <!-- Items injected by JS -->
-            <div class="text-center text-slate-400 text-sm py-10">暂无投注记录，快去机选一注吧！</div>
+        <div class="current-lines" id="currentBetList">
+          <p class="empty-copy">点击 AI选号 生成本期投注号码</p>
         </div>
-    </section>
+        <button class="bet-button" id="betBtn" type="button" disabled>投注，必中一等奖</button>
+      </section>
 
-    <script>
-        // Init Icons
-        lucide.createIcons();
+      <section class="draw-section" aria-labelledby="drawTitle">
+        <div class="section-head draw-head">
+          <h2 id="drawTitle">开奖结果</h2>
+          <div class="countdown-line">
+            <span>距离下期开奖</span>
+            <strong id="countdown">--:--:--</strong>
+          </div>
+        </div>
+        <div class="draw-card" id="latestDrawCard">
+          <div class="draw-loading">正在同步最近一期开奖结果</div>
+        </div>
+      </section>
 
-        // State
-        let isGenerated = false;
-        let currentNumbers = { red: [], blue: null };
-        let historyData = JSON.parse(localStorage.getItem('ssq_history')) || [];
-        let isEditMode = false;
+      <section class="history-section" aria-labelledby="historyTitle">
+        <div class="section-head history-head">
+          <h2 id="historyTitle">历史投注</h2>
+          <button class="delete-toggle" id="deleteToggle" type="button">
+            删除
+          </button>
+        </div>
+        <div class="history-list" id="historyList">
+          <div class="history-empty">暂无投注记录</div>
+        </div>
+      </section>
+    </main>
 
-        // Elements
-        const ballContainer = document.getElementById('ballContainer');
-        const mainBtn = document.getElementById('mainBtn');
-        const nextDrawDateEl = document.getElementById('nextDrawDate');
-        const countdownEl = document.getElementById('countdown');
-        const historyList = document.getElementById('historyList');
-        const editBtn = document.getElementById('editBtn');
-        const editBtnText = document.getElementById('editBtnText');
-        const editIcon = editBtn.querySelector('i');
-
-        // Logic: Time & Countdown
-        const formatZero = (n) => n < 10 ? '0' + n : n;
-        const weekMap = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-        
-        function getNextDrawTime() {
-            const now = new Date();
-            const drawDays = [0, 2, 4]; // Sun, Tue, Thu
-            let nextDraw = new Date(now);
-            nextDraw.setHours(21, 15, 0, 0);
-
-            if (now > nextDraw || !drawDays.includes(now.getDay())) {
-                for (let i = 1; i <= 7; i++) {
-                    let d = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
-                    if (drawDays.includes(d.getDay())) {
-                        nextDraw = d;
-                        nextDraw.setHours(21, 15, 0, 0);
-                        break;
-                    }
-                }
-            }
-            return nextDraw;
-        }
-
-        function updateTimer() {
-            const now = new Date();
-            const nextDraw = getNextDrawTime();
-            
-            // Format Date
-            nextDrawDateEl.innerText = `${nextDraw.getFullYear()}-${formatZero(nextDraw.getMonth()+1)}-${formatZero(nextDraw.getDate())} ${weekMap[nextDraw.getDay()]}`;
-
-            // Calc Diff
-            let diff = Math.floor((nextDraw - now) / 1000);
-            if (diff < 0) diff = 0;
-            
-            const h = Math.floor(diff / 3600);
-            const m = Math.floor((diff % 3600) / 60);
-            const s = diff % 60;
-            
-            countdownEl.innerText = `${formatZero(h)} : ${formatZero(m)} : ${formatZero(s)}`;
-            
-            // Auto update history status at 00:00 next day of draw
-            // For mock demo, if current time > nextDraw of record + 3 hours (midnight), mark as checked.
-            checkHistoryResults();
-        }
-
-        setInterval(updateTimer, 1000);
-        updateTimer();
-
-        // Logic: Generate Numbers
-        function generateNumbers() {
-            let reds = [];
-            while(reds.length < 6) {
-                let r = Math.floor(Math.random() * 33) + 1;
-                if(!reds.includes(r)) reds.push(r);
-            }
-            reds.sort((a,b) => a - b);
-            let blue = Math.floor(Math.random() * 16) + 1;
-            return { red: reds.map(formatZero), blue: formatZero(blue) };
-        }
-
-        function renderBalls(numbers) {
-            if(!numbers || numbers.red.length === 0) {
-                // Initial state: Always show colored balls with placeholder "?"
-                let html = Array(6).fill('<div class="ball red opacity-50">?</div>').join('');
-                html += '<div class="ball blue opacity-50 ml-2">?</div>';
-                ballContainer.innerHTML = html;
-                return;
-            }
-            let html = numbers.red.map(n => `<div class="ball red animate-bounce-3">${n}</div>`).join('');
-            html += `<div class="ball blue animate-bounce-3 ml-2">${numbers.blue}</div>`;
-            ballContainer.innerHTML = html;
-        }
-
-        // Logic: Actions
-        mainBtn.addEventListener('click', () => {
-            if (!isGenerated) {
-                // Generate
-                currentNumbers = generateNumbers();
-                renderBalls(currentNumbers);
-                isGenerated = true;
-                
-                // Update Button
-                mainBtn.classList.remove('btn-primary');
-                mainBtn.classList.add('btn-bet');
-                mainBtn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5"></i> <span>投 注</span>`;
-                lucide.createIcons();
-            } else {
-                // Bet
-                const now = new Date();
-                const record = {
-                    id: Date.now().toString(),
-                    time: `${now.getFullYear()}-${formatZero(now.getMonth()+1)}-${formatZero(now.getDate())} ${formatZero(now.getHours())}:${formatZero(now.getMinutes())}:${formatZero(now.getSeconds())}`,
-                    timestamp: now.getTime(),
-                    red: currentNumbers.red,
-                    blue: currentNumbers.blue,
-                    status: '等待开奖',
-                    drawTime: getNextDrawTime().getTime()
-                };
-                historyData.unshift(record);
-                saveHistory();
-                renderHistory();
-                
-                // Reset
-                isGenerated = false;
-                currentNumbers = { red: [], blue: null };
-                renderBalls(null);
-                mainBtn.classList.add('btn-primary');
-                mainBtn.classList.remove('btn-bet');
-                mainBtn.innerHTML = `<i data-lucide="dices" class="w-5 h-5"></i> <span>必 中</span>`;
-                lucide.createIcons();
-                
-                // Scroll to top
-                historyList.scrollTop = 0;
-            }
-        });
-
-        // Logic: History & Results
-        function saveHistory() {
-            localStorage.setItem('ssq_history', JSON.stringify(historyData));
-        }
-
-        // Mock checking results (Since no real API, we just mock "未中奖" after draw time + 3 hours)
-        function checkHistoryResults() {
-            let changed = false;
-            const now = Date.now();
-            historyData.forEach(item => {
-                if(item.status === '等待开奖' && now > item.drawTime + (3 * 60 * 60 * 1000)) { // +3 hours mock for next day 00:00
-                    // randomly assign a mock result or just lose
-                    const r = Math.random();
-                    if(r > 0.98) item.status = '六等奖';
-                    else if(r > 0.999) item.status = '一等奖';
-                    else item.status = '未中奖';
-                    changed = true;
-                }
-            });
-            if(changed) {
-                saveHistory();
-                renderHistory();
-            }
-        }
-
-        function renderHistory() {
-            if(historyData.length === 0) {
-                historyList.innerHTML = '<div class="text-center text-slate-400 text-sm py-10">暂无投注记录，快去机选一注吧！</div>';
-                return;
-            }
-            
-            historyList.innerHTML = historyData.map(item => {
-                let statusColor = 'text-slate-400';
-                if(item.status === '等待开奖') statusColor = 'text-amber-500 font-medium';
-                if(item.status.includes('等奖')) statusColor = 'text-red-500 font-bold';
-                
-                return `
-                <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex items-center history-item">
-                    <button class="delete-btn text-red-500 flex-shrink-0 flex items-center justify-center h-full" onclick="deleteRecord('${item.id}')">
-                        <i data-lucide="minus-circle" class="w-5 h-5 fill-red-100"></i>
-                    </button>
-                    <div class="flex-1 history-content pl-1">
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="text-xs text-slate-400 font-mono">${item.time}</span>
-                            <span class="text-xs ${statusColor} bg-slate-50 px-2 py-0.5 rounded">${item.status}</span>
-                        </div>
-                        <div class="flex items-center gap-1.5 font-mono text-sm font-semibold tracking-tight">
-                            <span class="text-red-500">${item.red.join(' ')}</span>
-                            <span class="text-slate-300">|</span>
-                            <span class="text-blue-600">${item.blue}</span>
-                        </div>
-                    </div>
-                </div>
-                `;
-            }).join('');
-            lucide.createIcons();
-        }
-
-        // Edit Mode Toggle with Icon Switch
-        editBtn.addEventListener('click', () => {
-            // Prevent entering edit mode if empty, but allow exiting edit mode even if empty
-            if(historyData.length === 0 && !isEditMode) return;
-            
-            isEditMode = !isEditMode;
-            const iconEl = editBtn.querySelector('i');
-            if(isEditMode) {
-                historyList.classList.add('edit-mode');
-                editBtnText.innerText = '完成';
-                editBtn.classList.replace('text-slate-500', 'text-blue-600');
-                editBtn.classList.replace('bg-slate-100', 'bg-blue-50');
-                // Switch to check icon
-                iconEl.setAttribute('data-lucide', 'check');
-            } else {
-                historyList.classList.remove('edit-mode');
-                editBtnText.innerText = '删除';
-                editBtn.classList.replace('text-blue-600', 'text-slate-500');
-                editBtn.classList.replace('bg-blue-50', 'bg-slate-100');
-                // Switch back to trash icon
-                iconEl.setAttribute('data-lucide', 'trash-2');
-            }
-            lucide.createIcons(); // Re-render icons
-        });
-
-        window.deleteRecord = function(id) {
-            historyData = historyData.filter(item => item.id !== id);
-            saveHistory();
-            renderHistory();
-            if(historyData.length === 0 && isEditMode) {
-                editBtn.click(); // Auto exit edit mode
-            }
-        };
-
-        // Init
-        renderBalls(null); // Initialize colored placeholder balls on page load
-        renderHistory();
-    </script>
-</body>
+    <script src="./app.js"></script>
+  </body>
 </html>
