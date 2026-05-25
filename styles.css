@@ -48,7 +48,7 @@ button {
   width: min(100%, 430px);
   min-height: 100vh;
   margin: 0 auto;
-  padding: 34px 14px 28px;
+  padding: 16px 14px 28px;
 }
 
 .app-header {
@@ -291,11 +291,12 @@ h2::before {
   width: 100%;
   min-height: 38px;
   border-radius: 14px;
-  padding: 0 8px;
+  padding: 0 13px;
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
+  justify-content: space-between;
 }
 
 .bet-line .reds {
@@ -304,6 +305,7 @@ h2::before {
 }
 
 .current-lines .bet-line .reds {
+  min-width: 0;
   word-spacing: 1px;
 }
 
@@ -316,6 +318,7 @@ h2::before {
 
 .bet-line .blue {
   color: var(--blue);
+  flex: 0 0 auto;
 }
 
 .bet-button {
@@ -525,7 +528,7 @@ h2::before {
 
 @media (max-width: 380px) {
   .page-shell {
-    padding: 24px 10px 24px;
+    padding: 12px 10px 24px;
   }
 
   .app-header {
