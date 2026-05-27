@@ -257,8 +257,8 @@ h2::before {
   min-height: 104px;
   margin-top: 16px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 10px;
   align-items: start;
 }
 
@@ -291,12 +291,12 @@ h2::before {
   width: 100%;
   min-height: 38px;
   border-radius: 14px;
-  padding: 0 13px;
+  padding: 0 16px;
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  gap: 8px;
-  font-size: 13px;
-  justify-content: space-between;
+  gap: 10px;
+  font-size: 15px;
+  justify-content: flex-start;
 }
 
 .bet-line .reds {
