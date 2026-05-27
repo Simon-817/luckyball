@@ -40,7 +40,7 @@ const HYBRID_CONFIG = {
 };
 
 const FALLBACK_DRAWS = [
-  { period: "26059", red_balls: ["03", "09", "15", "21", "26", "32"], blue_ball: "08", date: "2026-05-26" },
+  { period: "26059", red_balls: ["08", "16", "26", "28", "29", "30"], blue_ball: "15", date: "2026-05-26" },
   { period: "26058", red_balls: ["01", "04", "07", "21", "29", "30"], blue_ball: "01", date: "2026-05-24" },
   { period: "26057", red_balls: ["01", "10", "22", "24", "28", "30"], blue_ball: "07", date: "2026-05-21" },
   { period: "26056", red_balls: ["10", "19", "21", "22", "31", "33"], blue_ball: "05", date: "2026-05-19" },
