@@ -7,6 +7,9 @@ const CHINA_OFFSET_MS = 8 * 60 * 60 * 1000;
 const STORAGE_KEY = "ssq-bet-history-v1";
 const DATA_URL =
   "https://raw.githubusercontent.com/sinyu1012/Double-Color-Ball-AI/main/data/lottery_history.json";
+const OFFICIAL_DATA_URL =
+  "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=&issueStart=&issueEnd=&dayStart=&dayEnd=&pageNo=1&pageSize=30&week=&systemType=PC";
+const DATA_SOURCES = [DATA_URL, OFFICIAL_DATA_URL];
 
 const FIXED_LINES = [
   { reds: [5, 22, 24, 26, 29, 32], blue: 12, type: "fixed" },
@@ -37,6 +40,7 @@ const HYBRID_CONFIG = {
 };
 
 const FALLBACK_DRAWS = [
+  { period: "26059", red_balls: ["03", "09", "15", "21", "26", "32"], blue_ball: "08", date: "2026-05-26" },
   { period: "26058", red_balls: ["01", "04", "07", "21", "29", "30"], blue_ball: "01", date: "2026-05-24" },
   { period: "26057", red_balls: ["01", "10", "22", "24", "28", "30"], blue_ball: "07", date: "2026-05-21" },
   { period: "26056", red_balls: ["10", "19", "21", "22", "31", "33"], blue_ball: "05", date: "2026-05-19" },
@@ -110,23 +114,35 @@ function normalizeIssue(period) {
   return raw;
 }
 
+function normalizeDate(dateText) {
+  const match = String(dateText || "").match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}/);
+  if (!match) return "";
+  const [year, month, day] = match[0].replace(/\//g, "-").split("-").map(Number);
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+function parseBallList(value) {
+  if (Array.isArray(value)) return value;
+  return String(value || "").split(/[,\s]+/);
+}
+
 function normalizeDraw(raw) {
-  const reds = (raw.red_balls || raw.reds || raw.frontWinningNum?.split(/\s+/) || [])
+  const reds = parseBallList(raw.red_balls || raw.reds || raw.red || raw.frontWinningNum)
     .map(toNumber)
     .filter((num) => num >= RED_MIN && num <= RED_MAX)
     .sort((a, b) => a - b);
   const blue = toNumber(raw.blue_ball || raw.blue || raw.backWinningNum);
 
   return {
-    issue: normalizeIssue(raw.period || raw.issue),
-    date: raw.date || raw.openTime || "",
+    issue: normalizeIssue(raw.period || raw.issue || raw.code),
+    date: normalizeDate(raw.date || raw.openTime),
     reds,
     blue,
   };
 }
 
 function normalizeHistory(payload) {
-  const rows = Array.isArray(payload) ? payload : payload.data;
+  const rows = Array.isArray(payload) ? payload : payload.data || payload.result;
   if (!Array.isArray(rows)) throw new Error("开奖记录格式不正确");
 
   const draws = rows
@@ -138,10 +154,41 @@ function normalizeHistory(payload) {
   return draws;
 }
 
+function appendCacheBust(url) {
+  return `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
+
+function mergeDrawSets(drawSets) {
+  const byIssue = new Map();
+
+  drawSets.flat().forEach((draw) => {
+    if (draw.issue) byIssue.set(draw.issue, draw);
+  });
+
+  return [...byIssue.values()].sort((a, b) => Number(b.issue) - Number(a.issue));
+}
+
+async function fetchDataSource(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const response = await fetch(appendCacheBust(url), { cache: "no-store", signal: controller.signal });
+    if (!response.ok) throw new Error(`接口响应 ${response.status}`);
+    return normalizeHistory(await response.json());
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchLotteryHistory() {
-  const response = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: "no-store" });
-  if (!response.ok) throw new Error(`接口响应 ${response.status}`);
-  return normalizeHistory(await response.json());
+  const fallbackDraws = normalizeHistory(FALLBACK_DRAWS);
+  const settled = await Promise.allSettled(DATA_SOURCES.map(fetchDataSource));
+  const remoteDrawSets = settled.map((result) => (result.status === "fulfilled" ? result.value : []));
+  const merged = mergeDrawSets([fallbackDraws, ...remoteDrawSets]);
+
+  if (merged.length < HISTORY_WINDOW) throw new Error("可用开奖记录不足");
+  return merged;
 }
 
 function chinaParts(timestamp = Date.now()) {
