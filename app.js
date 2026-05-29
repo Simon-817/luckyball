@@ -7,9 +7,11 @@ const CHINA_OFFSET_MS = 8 * 60 * 60 * 1000;
 const STORAGE_KEY = "ssq-bet-history-v1";
 const DATA_URL =
   "https://raw.githubusercontent.com/sinyu1012/Double-Color-Ball-AI/main/data/lottery_history.json";
+const CDN_DATA_URL =
+  "https://cdn.jsdelivr.net/gh/sinyu1012/Double-Color-Ball-AI@main/data/lottery_history.json";
 const OFFICIAL_DATA_URL =
   "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=&issueStart=&issueEnd=&dayStart=&dayEnd=&pageNo=1&pageSize=30&week=&systemType=PC";
-const DATA_SOURCES = [DATA_URL, OFFICIAL_DATA_URL];
+const DATA_SOURCES = [DATA_URL, CDN_DATA_URL, OFFICIAL_DATA_URL];
 
 const FIXED_LINES = [
   { reds: [5, 22, 24, 26, 29, 32], blue: 12, type: "fixed" },
@@ -40,6 +42,7 @@ const HYBRID_CONFIG = {
 };
 
 const FALLBACK_DRAWS = [
+  { period: "26060", red_balls: ["07", "09", "10", "16", "22", "27"], blue_ball: "11", date: "2026-05-28" },
   { period: "26059", red_balls: ["08", "16", "26", "28", "29", "30"], blue_ball: "15", date: "2026-05-26" },
   { period: "26058", red_balls: ["01", "04", "07", "21", "29", "30"], blue_ball: "01", date: "2026-05-24" },
   { period: "26057", red_balls: ["01", "10", "22", "24", "28", "30"], blue_ball: "07", date: "2026-05-21" },
