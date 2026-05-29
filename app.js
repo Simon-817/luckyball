@@ -84,6 +84,7 @@ const state = {
   currentLines: [],
   history: [],
   deleteMode: false,
+  loadingDraw: false,
   countdownTimer: null,
 };
 
@@ -255,6 +256,28 @@ function countDrawSlotsAfterLatest(targetTimestamp) {
   }
 
   return Math.max(1, count);
+}
+
+function countElapsedDrawSlotsAfterLatest(targetTimestamp = Date.now()) {
+  if (!state.latestDraw?.date) return 0;
+  const latestDate = parseChinaDate(state.latestDraw.date);
+  const latestTimestamp = chinaTimestamp(latestDate.year, latestDate.month, latestDate.day, 21, 15, 0);
+  let count = 0;
+
+  for (let offset = 1; offset <= 45; offset += 1) {
+    const candidate = addChinaDays(latestDate, offset);
+    if (!isDrawWeekday(candidate.week)) continue;
+    const drawAt = chinaTimestamp(candidate.year, candidate.month, candidate.day, 21, 15, 0);
+    if (drawAt > targetTimestamp) break;
+    if (drawAt > latestTimestamp) count += 1;
+  }
+
+  return count;
+}
+
+function getExpectedLatestIssue(timestamp = Date.now()) {
+  const latestIssue = Number(state.latestDraw?.issue || normalizeDraw(FALLBACK_DRAWS[0]).issue);
+  return String(latestIssue + countElapsedDrawSlotsAfterLatest(timestamp));
 }
 
 function getBetIssue(timestamp = Date.now()) {
@@ -704,9 +727,24 @@ function renderCurrentBet() {
 }
 
 function renderLatestDraw() {
-  const draw = state.latestDraw;
+  const expectedIssue = getExpectedLatestIssue();
+  const draw = drawForIssue(expectedIssue) || state.latestDraw;
   if (!draw) {
     els.latestDrawCard.innerHTML = `<div class="draw-loading">正在同步最近一期开奖结果</div>`;
+    return;
+  }
+
+  if (Number(expectedIssue) > Number(draw.issue)) {
+    els.latestDrawCard.innerHTML = `
+      <div class="draw-pending">
+        <div class="draw-issue">第${expectedIssue}期</div>
+        <p>正在获取最新开奖结果</p>
+        <button class="draw-refresh" type="button"${state.loadingDraw ? " disabled" : ""}>
+          ${state.loadingDraw ? "获取中" : "刷新"}
+        </button>
+      </div>
+    `;
+    els.latestDrawCard.querySelector(".draw-refresh")?.addEventListener("click", loadData);
     return;
   }
 
@@ -746,6 +784,7 @@ function drawForIssue(issue) {
 function renderHistory() {
   els.deleteToggle.classList.toggle("is-active", state.deleteMode);
   els.deleteToggle.textContent = state.deleteMode ? "完成" : "删除";
+  const expectedLatestIssue = getExpectedLatestIssue();
 
   if (!state.history.length) {
     els.historyList.innerHTML = `<div class="history-empty">暂无投注记录</div>`;
@@ -761,10 +800,10 @@ function renderHistory() {
       <button class="record-remove" type="button" aria-label="删除投注记录">×</button>
     `;
 
-    const draw = Number(record.issue) <= Number(state.latestDraw?.issue || 0) ? drawForIssue(record.issue) : null;
+    const draw = Number(record.issue) <= Number(expectedLatestIssue) ? drawForIssue(record.issue) : null;
     record.lines.forEach((line) => {
       const row = document.createElement("div");
-      const status = Number(record.issue) > Number(state.latestDraw?.issue || 0) ? "未开奖" : evaluateLine(line, draw);
+      const status = Number(record.issue) > Number(expectedLatestIssue) || !draw ? "未开奖" : evaluateLine(line, draw);
       row.className = "history-line";
       row.append(makeBetLine(line));
       const badge = document.createElement("span");
@@ -845,10 +884,14 @@ function toggleDeleteMode() {
 }
 
 async function loadData() {
+  state.loadingDraw = true;
+  renderLatestDraw();
   try {
     state.draws = await fetchLotteryHistory();
   } catch {
     state.draws = normalizeHistory(FALLBACK_DRAWS);
+  } finally {
+    state.loadingDraw = false;
   }
 
   state.latestDraw = state.draws[0];

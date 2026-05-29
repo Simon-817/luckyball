@@ -420,6 +420,41 @@ h2::before {
   font-weight: 650;
 }
 
+.draw-pending {
+  min-height: 86px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.draw-pending p {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.draw-refresh {
+  min-width: 92px;
+  min-height: 36px;
+  border-radius: 999px;
+  padding: 0 18px;
+  background: #ffffff;
+  color: var(--blue-dark);
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+}
+
+.draw-refresh:disabled {
+  cursor: default;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: none;
+}
+
 .history-head {
   padding-bottom: 12px;
 }
