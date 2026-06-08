@@ -33,6 +33,7 @@ const SOCIAL_NUMS = new Set([...LUCKY_NUMS, ...TENS_NUMS, ...SYMMETRY_NUMS]);
 
 const HYBRID_CONFIG = {
   entropyFloor: 73,
+  candidatePoolSize: 320,
   breakWeights: [
     [1, 0.26],
     [2, 0.5],
@@ -102,6 +103,20 @@ const els = {
 
 function range(start, end) {
   return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+}
+
+function randomFloat() {
+  const cryptoSource = globalThis.crypto;
+  if (cryptoSource?.getRandomValues) {
+    const values = new Uint32Array(1);
+    cryptoSource.getRandomValues(values);
+    return values[0] / 4294967296;
+  }
+  return Math.random();
+}
+
+function randomInt(min, max) {
+  return Math.floor(randomFloat() * (max - min + 1)) + min;
 }
 
 function pad(num) {
@@ -304,7 +319,7 @@ function formatDuration(ms) {
 function weightedPick(entries) {
   const valid = entries.filter((entry) => entry[1] > 0);
   const total = valid.reduce((sum, entry) => sum + entry[1], 0);
-  let cursor = Math.random() * total;
+  let cursor = randomFloat() * total;
 
   for (const [value, weight] of valid) {
     cursor -= weight;
@@ -329,12 +344,35 @@ function weightedSample(items, count, weightFn) {
   return picked;
 }
 
-function zoneFor(num) {
-  return ZONES.find((zone) => num >= zone.range[0] && num <= zone.range[1]);
+function zoneFor(num, zones = ZONES) {
+  return zones.find((zone) => num >= zone.range[0] && num <= zone.range[1]);
 }
 
 function zoneNums(zone) {
   return range(zone.range[0], zone.range[1]);
+}
+
+function createDynamicZones() {
+  const baseEnds = [6, 13, 20, 27];
+  const ends = [];
+
+  baseEnds.forEach((baseEnd, index) => {
+    const previous = ends[index - 1] || 0;
+    const remainingZones = 4 - index;
+    const minEnd = previous + 5;
+    const maxEnd = 33 - remainingZones * 5;
+    const shifted = baseEnd + randomInt(-1, 1);
+    ends.push(Math.max(minEnd, Math.min(maxEnd, shifted)));
+  });
+
+  const ranges = [];
+  let start = 1;
+  [...ends, 33].forEach((end, index) => {
+    ranges.push({ id: index + 1, range: [start, end] });
+    start = end + 1;
+  });
+
+  return ranges;
 }
 
 function isBirthday(num) {
@@ -415,7 +453,25 @@ function computeHeatProfile(draws) {
     .slice(0, 8)
     .map((row) => row.num);
 
-  return { hotNums, coldNums, warmingNums };
+  const heatRows = rows.map((row) => {
+    const nearCold = coldSet.has(row.num - 1) || coldSet.has(row.num + 1);
+    const nearHot = hotSet.has(row.num - 1) || hotSet.has(row.num + 1);
+    const trendLift = row.shortFreq - row.baseFreq / 2;
+    const missLift = Math.min(row.lastSeen, 12) / 12;
+    const tempScore =
+      row.shortFreq * 0.22 +
+      row.latest5Freq * 0.28 +
+      trendLift * 0.2 +
+      missLift * 0.18 +
+      (warmingNums.includes(row.num) ? 0.3 : 0) +
+      (nearCold ? 0.12 : 0) -
+      (hotSet.has(row.num) ? 0.45 : 0) -
+      (coldSet.has(row.num) ? 0.38 : 0) -
+      (nearHot ? 0.08 : 0);
+    return { ...row, tempScore };
+  });
+
+  return { hotNums, coldNums, warmingNums, heatRows };
 }
 
 function readSettings() {
@@ -426,6 +482,7 @@ function readSettings() {
     hotNums: new Set(heatProfile.hotNums),
     coldNums: new Set(heatProfile.coldNums),
     warmingNums: new Set(heatProfile.warmingNums),
+    heatRows: new Map((heatProfile.heatRows || []).map((row) => [row.num, row])),
   };
 }
 
@@ -440,17 +497,20 @@ function tempLabel(num, settings) {
 
 function tempWeight(num, settings) {
   const label = tempLabel(num, settings);
-  if (label === "极热" || label === "极冷") return 0;
-  if (label === "回温") return 1.65;
-  if (label === "冷邻") return 1.28;
-  if (label === "热邻") return 0.82;
-  return 1;
+  const tempScore = settings.heatRows.get(num)?.tempScore || 0;
+  const scoreBoost = Math.max(0.72, Math.min(1.38, 1 + tempScore * 0.22));
+  if (label === "极热") return 0.36 * scoreBoost;
+  if (label === "极冷") return 0.32 * scoreBoost;
+  if (label === "回温") return 1.46 * scoreBoost;
+  if (label === "冷邻") return 1.2 * scoreBoost;
+  if (label === "热邻") return 0.84 * scoreBoost;
+  return scoreBoost;
 }
 
-function chooseBrokenZones(settings) {
+function chooseBrokenZones(settings, zones = ZONES) {
   const breakCount = weightedPick(HYBRID_CONFIG.breakWeights);
-  const previousZoneIds = new Set(settings.previousReds.map((num) => zoneFor(num).id));
-  const entries = ZONES.map((zone) => {
+  const previousZoneIds = new Set(settings.previousReds.map((num) => zoneFor(num, zones).id));
+  const entries = zones.map((zone) => {
     const hasPrevious = previousZoneIds.has(zone.id);
     const middleBias = zone.id === 3 ? 0.86 : 1;
     return [zone, (hasPrevious ? 0.82 : 1.14) * middleBias];
@@ -480,11 +540,15 @@ function buildZoneBias(aliveZones) {
   return bias;
 }
 
-function pickLockedShadows(settings, aliveNums) {
-  const shadowTarget = weightedPick([
-    [1, 0.62],
-    [2, 0.38],
-  ]);
+function pickLockedShadows(settings, aliveNums, shadowTarget = null) {
+  if (shadowTarget === null) {
+    shadowTarget = weightedPick([
+      [0, 0.05],
+      [1, 0.7],
+      [2, 0.25],
+    ]);
+  }
+  if (!shadowTarget) return [];
   const viable = aliveNums.filter((num) => relationToPrevious(num, settings.previousReds) && tempWeight(num, settings) > 0);
 
   return weightedSample(viable, shadowTarget, (num) => {
@@ -546,9 +610,9 @@ function gapStats(nums) {
   return { gaps, unique, monotoneUp, monotoneDown };
 }
 
-function zoneDistribution(nums) {
-  const counts = new Map(ZONES.map((zone) => [zone.id, 0]));
-  nums.forEach((num) => counts.set(zoneFor(num).id, counts.get(zoneFor(num).id) + 1));
+function zoneDistribution(nums, zones = ZONES) {
+  const counts = new Map(zones.map((zone) => [zone.id, 0]));
+  nums.forEach((num) => counts.set(zoneFor(num, zones).id, counts.get(zoneFor(num, zones).id) + 1));
   return counts;
 }
 
@@ -562,20 +626,38 @@ function countPairs(nums, predicate) {
   return count;
 }
 
-function analyzeReds(reds, settings, brokenZones, relaxed = false) {
+function hasTailLadder(nums) {
+  const tailGroups = new Map();
+  nums.forEach((num) => {
+    const tail = num % 10;
+    tailGroups.set(tail, [...(tailGroups.get(tail) || []), num]);
+  });
+
+  return [...tailGroups.values()].some((items) => {
+    if (items.length < 3) return false;
+    const sorted = [...items].sort((a, b) => a - b);
+    return hasArithmeticRun(sorted, 3);
+  });
+}
+
+function analyzeReds(reds, settings, brokenZones, zones = ZONES, relaxed = false) {
   const birthdayCount = reds.filter(isBirthday).length;
   const socialCount = reds.filter(isSocialAnchor).length;
   const tensCount = reds.filter((num) => TENS_NUMS.has(num)).length;
   const symmetryCount = reds.filter((num) => SYMMETRY_NUMS.has(num)).length;
   const evenCount = reds.filter((num) => num % 2 === 0).length;
   const highCount = reds.filter((num) => num >= 17).length;
+  const lowHumanCount = reds.filter((num) => num <= 31).length;
+  const evenNodeCount = reds.filter((num) => num % 2 === 0 && num <= 18).length;
+  const fiveMultipleCount = reds.filter((num) => num % 5 === 0).length;
   const sum = reds.reduce((total, num) => total + num, 0);
   const runs = maxRunLength(reds);
   const arithmetic4 = hasArithmeticRun(reds, 4);
   const arithmetic3 = hasArithmeticRun(reds, 3);
+  const tailLadder = hasTailLadder(reds);
   const tailMax = sameTailMax(reds);
   const gaps = gapStats(reds);
-  const zoneCounts = [...zoneDistribution(reds).values()].filter(Boolean);
+  const zoneCounts = [...zoneDistribution(reds, zones).values()].filter(Boolean);
   const occupiedZones = zoneCounts.length;
   const maxZone = Math.max(...zoneCounts);
   const mirrorPairs = countPairs(reds, (a, b) => a + b === 34);
@@ -599,85 +681,197 @@ function analyzeReds(reds, settings, brokenZones, relaxed = false) {
   entropyScore -= maxZone >= 4 ? 8 : 0;
   entropyScore -= occupiedZones === 5 ? 10 : 0;
   entropyScore -= Math.abs(sum - 102) <= 6 ? 7 : 0;
+  entropyScore -= lowHumanCount === 6 ? 5 : 0;
+  entropyScore -= Math.max(0, evenNodeCount - 3) * 4;
+  entropyScore -= Math.max(0, fiveMultipleCount - 1) * 6;
+  entropyScore -= tailLadder ? 10 : 0;
+  entropyScore -= sum >= 92 && sum <= 112 ? 4 : 0;
   entropyScore -= shadowItems.length === 0 || shadowItems.length > 2 ? 15 : 0;
-  entropyScore -= extremeTempCount * 50;
+  entropyScore -= extremeTempCount * 8;
   entropyScore = Math.max(0, Math.round(entropyScore));
 
-  const valid =
-    relaxed ||
-    (birthdayCount <= 2 &&
+  const hardValid =
+    runs < 3 &&
+    !arithmetic4 &&
+    !tailLadder &&
+    tailMax < 3 &&
+    mirrorPairs <= 1 &&
+    shadowItems.length <= 2 &&
+    maxZone <= 3;
+  const strictValid =
+    birthdayCount <= 2 &&
       socialCount <= 3 &&
       tensCount <= 1 &&
       symmetryCount <= 2 &&
       [2, 4].includes(evenCount) &&
       [2, 4].includes(highCount) &&
-      runs < 3 &&
-      !arithmetic4 &&
-      tailMax < 3 &&
-      mirrorPairs <= 1 &&
-      shadowItems.length >= 1 &&
-      shadowItems.length <= 2 &&
-      warmingCount >= 1 &&
-      coolNeighborCount >= 1 &&
-      extremeTempCount === 0 &&
-      maxZone <= 3 &&
-      entropyScore >= HYBRID_CONFIG.entropyFloor);
+      lowHumanCount <= 5 &&
+      evenNodeCount <= 4 &&
+      fiveMultipleCount <= 2 &&
+      warmingCount + coolNeighborCount >= 1 &&
+      extremeTempCount <= 2 &&
+      entropyScore >= HYBRID_CONFIG.entropyFloor;
+  const relaxedValid = entropyScore >= 58 && socialCount <= 4 && extremeTempCount <= 3;
+  const valid = hardValid && (relaxed ? relaxedValid : strictValid);
 
-  return { valid, entropyScore, brokenZones };
+  return {
+    valid,
+    entropyScore,
+    brokenZones,
+    birthdayCount,
+    socialCount,
+    tensCount,
+    symmetryCount,
+    evenCount,
+    highCount,
+    sum,
+    tailMax,
+    occupiedZones,
+    maxZone,
+    shadowCount: shadowItems.length,
+    warmingCount,
+    coolNeighborCount,
+    extremeTempCount,
+  };
+}
+
+function scoreCandidate(reds, analysis, zones) {
+  const zoneWidthSpread = Math.max(...zones.map((zone) => zone.range[1] - zone.range[0] + 1)) -
+    Math.min(...zones.map((zone) => zone.range[1] - zone.range[0] + 1));
+  let score = analysis.entropyScore;
+
+  score += analysis.shadowCount === 1 ? 9 : analysis.shadowCount === 2 ? 6 : 1;
+  score += Math.min(analysis.warmingCount + analysis.coolNeighborCount, 3) * 4;
+  score += analysis.occupiedZones <= 3 ? 8 : 0;
+  score += analysis.maxZone === 2 ? 5 : analysis.maxZone === 3 ? 2 : 0;
+  score += Math.abs(analysis.sum - 102) > 14 ? 6 : 0;
+  score -= Math.max(0, analysis.socialCount - 2) * 4;
+  score -= analysis.extremeTempCount * 5;
+  score -= zoneWidthSpread > 2 ? 4 : 0;
+  score -= sameTailMax(reds) > 2 ? 12 : 0;
+
+  return Math.round(score);
+}
+
+function buildCandidateLine(settings, relaxed = false, targetShadowCount = null) {
+  const zones = createDynamicZones();
+  const brokenZones = chooseBrokenZones(settings, zones);
+  const aliveZones = zones.filter((zone) => !brokenZones.has(zone.id));
+  const aliveNums = aliveZones.flatMap(zoneNums);
+  const zoneBias = buildZoneBias(aliveZones);
+  const locked = pickLockedShadows(settings, aliveNums, targetShadowCount);
+
+  if (locked.length > 2) return null;
+
+  const picked = [...locked];
+  const candidates = aliveNums.filter((num) => !picked.includes(num));
+
+  while (picked.length < 6) {
+    const next = weightedSample(candidates.filter((num) => !picked.includes(num)), 1, (num) => {
+      const zone = zoneFor(num, zones);
+      const selectedInZone = picked.filter((item) => zoneFor(item, zones).id === zone.id).length;
+      const zoneCrowdPenalty = selectedInZone >= 3 ? 0.22 : selectedInZone === 2 ? 0.62 : 1;
+      const hasShadowRelation = relationToPrevious(num, settings.previousReds);
+      const shadowLeakPenalty = hasShadowRelation ? (targetShadowCount === 0 ? 0.06 : 0.44) : 1;
+
+      return (
+        zoneBias.get(zone.id) *
+        socialWeight(num) *
+        tempWeight(num, settings) *
+        spacingPenalty(num, picked) *
+        zoneCrowdPenalty *
+        shadowLeakPenalty
+      );
+    })[0];
+
+    if (!next) break;
+    picked.push(next);
+  }
+
+  if (picked.length !== 6) return null;
+  const reds = [...picked].sort((a, b) => a - b);
+  const analysis = analyzeReds(reds, settings, brokenZones, zones, relaxed);
+  if (!analysis.valid) return null;
+  if (targetShadowCount !== null && analysis.shadowCount !== targetShadowCount) return null;
+
+  return {
+    reds,
+    blue: randomBlue(),
+    type: "ai",
+    entropyScore: analysis.entropyScore,
+    strategyScore: scoreCandidate(reds, analysis, zones),
+    meta: {
+      brokenZones: [...brokenZones],
+      zones: zones.map((zone) => zone.range),
+      shadowCount: analysis.shadowCount,
+      warmingCount: analysis.warmingCount,
+      coolNeighborCount: analysis.coolNeighborCount,
+    },
+  };
+}
+
+function chooseTopCandidate(candidates, targetShadowCount = null) {
+  const scoped = targetShadowCount === null
+    ? candidates
+    : candidates.filter((item) => item.meta?.shadowCount === targetShadowCount);
+  const pool = scoped.length ? scoped : candidates;
+  const sorted = [...pool].sort((a, b) => b.strategyScore - a.strategyScore || b.entropyScore - a.entropyScore);
+  const top = sorted.slice(0, Math.min(12, sorted.length));
+  return weightedPick(top.map((item, index) => [item, Math.max(1, top.length - index)]));
 }
 
 function generateAiLine() {
   const settings = readSettings();
+  const targetShadowCount = weightedPick([
+    [0, 0.05],
+    [1, 0.7],
+    [2, 0.25],
+  ]);
+  const candidates = [];
 
-  for (let attempt = 0; attempt < 8000; attempt += 1) {
-    const brokenZones = chooseBrokenZones(settings);
-    const aliveZones = ZONES.filter((zone) => !brokenZones.has(zone.id));
-    const aliveNums = aliveZones.flatMap(zoneNums);
-    const zoneBias = buildZoneBias(aliveZones);
-    const locked = pickLockedShadows(settings, aliveNums);
-
-    if (!locked.length || locked.length > 2) continue;
-
-    const picked = [...locked];
-    const candidates = aliveNums.filter((num) => !picked.includes(num));
-
-    while (picked.length < 6) {
-      const next = weightedSample(candidates.filter((num) => !picked.includes(num)), 1, (num) => {
-        const zone = zoneFor(num);
-        const selectedInZone = picked.filter((item) => zoneFor(item).id === zone.id).length;
-        const zoneCrowdPenalty = selectedInZone >= 3 ? 0.22 : selectedInZone === 2 ? 0.62 : 1;
-        const shadowLeakPenalty = relationToPrevious(num, settings.previousReds) ? 0.34 : 1;
-
-        return (
-          zoneBias.get(zone.id) *
-          socialWeight(num) *
-          tempWeight(num, settings) *
-          spacingPenalty(num, picked) *
-          zoneCrowdPenalty *
-          shadowLeakPenalty
-        );
-      })[0];
-
-      if (!next) break;
-      picked.push(next);
-    }
-
-    if (picked.length !== 6) continue;
-    const reds = [...picked].sort((a, b) => a - b);
-    const analysis = analyzeReds(reds, settings, brokenZones);
-    if (analysis.valid) return { reds, blue: randomBlue(), type: "ai", entropyScore: analysis.entropyScore };
+  for (let attempt = 0; attempt < HYBRID_CONFIG.candidatePoolSize; attempt += 1) {
+    const candidate = buildCandidateLine(settings, false, targetShadowCount);
+    if (candidate) candidates.push(candidate);
   }
 
-  const fallbackReds = weightedSample(
-    range(RED_MIN, RED_MAX).filter((num) => tempWeight(num, settings) > 0),
-    6,
-    (num, picked) => socialWeight(num) * spacingPenalty(num, picked) * tempWeight(num, settings)
-  ).sort((a, b) => a - b);
-  return { reds: fallbackReds, blue: randomBlue(), type: "ai", entropyScore: 60 };
+  if (!candidates.length) {
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      const candidate = buildCandidateLine(settings);
+      if (candidate) candidates.push(candidate);
+    }
+  }
+
+  if (!candidates.length) {
+    for (let attempt = 0; attempt < 140; attempt += 1) {
+      const candidate = buildCandidateLine(settings, true, targetShadowCount);
+      if (candidate) candidates.push(candidate);
+    }
+  }
+
+  if (candidates.length) return chooseTopCandidate(candidates, targetShadowCount);
+
+  for (let attempt = 0; attempt < 140; attempt += 1) {
+    const candidate = buildCandidateLine(settings, true);
+    if (candidate) candidates.push(candidate);
+  }
+
+  if (candidates.length) return chooseTopCandidate(candidates);
+
+  const fallbackReds = weightedSample(range(RED_MIN, RED_MAX), 6, (num, picked) => {
+    return socialWeight(num) * spacingPenalty(num, picked) * tempWeight(num, settings);
+  }).sort((a, b) => a - b);
+  const fallbackAnalysis = analyzeReds(fallbackReds, settings, new Set(), ZONES, true);
+  return {
+    reds: fallbackReds,
+    blue: randomBlue(),
+    type: "ai",
+    entropyScore: fallbackAnalysis.entropyScore,
+    strategyScore: scoreCandidate(fallbackReds, fallbackAnalysis, ZONES),
+  };
 }
 
 function randomBlue() {
-  return Math.floor(Math.random() * BLUE_MAX) + BLUE_MIN;
+  return randomInt(BLUE_MIN, BLUE_MAX);
 }
 
 function makeBall(num, color, placeholder = false) {
