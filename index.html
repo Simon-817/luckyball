@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>双色球选号</title>
-    <link rel="stylesheet" href="./styles.css?v=20260608-strategy" />
+    <link rel="stylesheet" href="./styles.css?v=20260617-filter-v2" />
   </head>
   <body>
     <main class="page-shell">
@@ -13,7 +13,6 @@
           <h1>双色球选号</h1>
         </div>
         <div class="date-pill" aria-label="当前日期">
-          <span class="calendar-icon" aria-hidden="true"></span>
           <span id="dateLabel">0000-00-00 星期一</span>
         </div>
       </header>
@@ -32,7 +31,7 @@
         <div class="current-lines" id="currentBetList">
           <p class="empty-copy">点击 AI选号 生成本期投注号码</p>
         </div>
-        <button class="bet-button" id="betBtn" type="button" disabled>投注，必中一等奖</button>
+        <button class="bet-button" id="betBtn" type="button" disabled>投注</button>
       </section>
 
       <section class="draw-section" aria-labelledby="drawTitle">
@@ -50,10 +49,39 @@
 
       <section class="history-section" aria-labelledby="historyTitle">
         <div class="section-head history-head">
-          <h2 id="historyTitle">历史投注</h2>
-          <button class="delete-toggle" id="deleteToggle" type="button">
-            删除
-          </button>
+          <div class="history-title-group">
+            <h2 id="historyTitle">历史投注</h2>
+            <div class="history-filter" id="historyFilter">
+              <button
+                class="history-filter-trigger"
+                id="historyFilterTrigger"
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+              >
+                <span id="historyFilterLabel">近30天</span>
+                <img src="./assets/chevron-down.svg" alt="" aria-hidden="true" />
+              </button>
+              <div
+                class="history-filter-menu"
+                id="historyFilterMenu"
+                role="listbox"
+                aria-label="筛选历史投注记录"
+                hidden
+              >
+                <button type="button" role="option" data-value="30d" aria-selected="true">近30天</button>
+                <button type="button" role="option" data-value="6m" aria-selected="false">近半年</button>
+                <button type="button" role="option" data-value="1y" aria-selected="false">近1年</button>
+                <button type="button" role="option" data-value="all" aria-selected="false">全部</button>
+              </div>
+            </div>
+          </div>
+          <div class="history-actions">
+            <button class="delete-toggle" id="deleteToggle" type="button" aria-label="删除投注记录">
+              <img src="./assets/delete.svg" alt="" aria-hidden="true" />
+              <span class="delete-done-label">完成</span>
+            </button>
+          </div>
         </div>
         <div class="history-list" id="historyList">
           <div class="history-empty">暂无投注记录</div>
@@ -61,6 +89,7 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260608-strategy"></script>
+    <script src="./history-utils.js?v=20260617-filter-v2"></script>
+    <script src="./app.js?v=20260617-filter-v2"></script>
   </body>
 </html>

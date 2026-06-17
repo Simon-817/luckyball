@@ -3,6 +3,13 @@ const RED_MAX = 33;
 const BLUE_MIN = 1;
 const BLUE_MAX = 16;
 const HISTORY_WINDOW = 30;
+const HISTORY_PAGE_SIZE = 12;
+const HISTORY_FILTER_LABELS = {
+  "30d": "近30天",
+  "6m": "近半年",
+  "1y": "近1年",
+  all: "全部",
+};
 const CHINA_OFFSET_MS = 8 * 60 * 60 * 1000;
 const STORAGE_KEY = "ssq-bet-history-v1";
 const DATA_URL =
@@ -84,7 +91,10 @@ const state = {
   generatedLine: null,
   currentLines: [],
   history: [],
+  historyFilter: "30d",
+  historyPage: 1,
   deleteMode: false,
+  historyObserver: null,
   loadingDraw: false,
   countdownTimer: null,
 };
@@ -98,6 +108,11 @@ const els = {
   countdown: document.querySelector("#countdown"),
   latestDrawCard: document.querySelector("#latestDrawCard"),
   historyList: document.querySelector("#historyList"),
+  historyFilter: document.querySelector("#historyFilter"),
+  historyFilterTrigger: document.querySelector("#historyFilterTrigger"),
+  historyFilterLabel: document.querySelector("#historyFilterLabel"),
+  historyFilterMenu: document.querySelector("#historyFilterMenu"),
+  historyFilterOptions: [...document.querySelectorAll("#historyFilterMenu [role='option']")],
   deleteToggle: document.querySelector("#deleteToggle"),
 };
 
@@ -885,14 +900,32 @@ function formatReds(reds) {
   return reds.map(pad).join(" ");
 }
 
-function makeBetLine(line) {
+function makeNumberRow(line, draw = null) {
+  const row = document.createElement("div");
+  row.className = "number-row";
+  const hits = HistoryUtils.matchedNumbers(line, draw);
+
+  line.reds.forEach((num) => {
+    const ball = document.createElement("span");
+    ball.className = `number-chip red${hits.reds.includes(num) ? " is-hit" : ""}`;
+    ball.textContent = pad(num);
+    row.append(ball);
+  });
+
+  const blue = document.createElement("span");
+  blue.className = `number-chip blue${hits.blue ? " is-hit" : ""}`;
+  blue.textContent = pad(line.blue);
+  row.append(blue);
+  return row;
+}
+
+function makeCurrentLine(line, index) {
   const node = document.createElement("div");
-  node.className = "bet-line";
-  node.innerHTML = `
-    <span class="reds">${formatReds(line.reds)}</span>
-    <span class="divider" aria-hidden="true"></span>
-    <span class="blue">${pad(line.blue)}</span>
-  `;
+  node.className = `current-line${line.type === "ai" ? " is-generated" : ""}`;
+  const label = document.createElement("span");
+  label.className = "line-label";
+  label.textContent = `第${index + 1}注（${line.type === "ai" ? "生成" : "固定"}）`;
+  node.append(label, makeNumberRow(line));
   return node;
 }
 
@@ -916,7 +949,7 @@ function renderCurrentBet() {
     return;
   }
 
-  state.currentLines.forEach((line) => els.currentBetList.append(makeBetLine(line)));
+  state.currentLines.forEach((line, index) => els.currentBetList.append(makeCurrentLine(line, index)));
   els.betBtn.disabled = false;
 }
 
@@ -977,29 +1010,38 @@ function drawForIssue(issue) {
 
 function renderHistory() {
   els.deleteToggle.classList.toggle("is-active", state.deleteMode);
-  els.deleteToggle.textContent = state.deleteMode ? "完成" : "删除";
+  els.deleteToggle.setAttribute("aria-label", state.deleteMode ? "完成删除" : "删除投注记录");
   const expectedLatestIssue = getExpectedLatestIssue();
+  const filtered = HistoryUtils.filterHistory(state.history, state.historyFilter);
+  const visible = HistoryUtils.paginateHistory(filtered, state.historyPage, HISTORY_PAGE_SIZE);
 
-  if (!state.history.length) {
-    els.historyList.innerHTML = `<div class="history-empty">暂无投注记录</div>`;
+  state.historyObserver?.disconnect();
+  els.historyList.innerHTML = "";
+
+  if (!filtered.length) {
+    els.historyList.innerHTML = `<div class="history-empty">该时间范围内暂无投注记录</div>`;
     return;
   }
 
-  els.historyList.innerHTML = "";
-  state.history.forEach((record) => {
+  visible.forEach((record) => {
     const card = document.createElement("article");
     card.className = `history-card${state.deleteMode ? " delete-mode" : ""}`;
     card.innerHTML = `
       <div class="history-issue">第${record.issue}期</div>
-      <button class="record-remove" type="button" aria-label="删除投注记录">×</button>
+      <button class="record-remove" type="button" aria-label="删除第${record.issue}期投注记录">
+        <img src="./assets/delete.svg" alt="" aria-hidden="true" />
+      </button>
     `;
 
     const draw = Number(record.issue) <= Number(expectedLatestIssue) ? drawForIssue(record.issue) : null;
-    record.lines.forEach((line) => {
+    record.lines.forEach((line, index) => {
       const row = document.createElement("div");
       const status = Number(record.issue) > Number(expectedLatestIssue) || !draw ? "未开奖" : evaluateLine(line, draw);
       row.className = "history-line";
-      row.append(makeBetLine(line));
+      const label = document.createElement("span");
+      label.className = "history-line-label";
+      label.textContent = `第${index + 1}注`;
+      row.append(label, makeNumberRow(line, draw));
       const badge = document.createElement("span");
       badge.className = `status-badge ${statusClass(status)}`;
       badge.textContent = status;
@@ -1014,6 +1056,27 @@ function renderHistory() {
     });
     els.historyList.append(card);
   });
+
+  if (visible.length < filtered.length) {
+    const sentinel = document.createElement("div");
+    sentinel.className = "history-load-sentinel";
+    sentinel.textContent = "继续上滑加载更多";
+    els.historyList.append(sentinel);
+    state.historyObserver = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        state.historyPage += 1;
+        renderHistory();
+      },
+      { rootMargin: "240px 0px" },
+    );
+    state.historyObserver.observe(sentinel);
+  } else if (filtered.length > HISTORY_PAGE_SIZE) {
+    const end = document.createElement("div");
+    end.className = "history-load-sentinel";
+    end.textContent = "已加载全部记录";
+    els.historyList.append(end);
+  }
 }
 
 function renderDateAndCountdown() {
@@ -1033,7 +1096,9 @@ function renderAll() {
 function loadHistory() {
   try {
     const rows = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    state.history = Array.isArray(rows) ? rows : [];
+    state.history = Array.isArray(rows)
+      ? rows.sort((left, right) => HistoryUtils.recordTimestamp(right) - HistoryUtils.recordTimestamp(left))
+      : [];
   } catch {
     state.history = [];
   }
@@ -1066,6 +1131,7 @@ function handleBet() {
   };
 
   state.history.unshift(record);
+  state.historyPage = 1;
   saveHistory();
   state.generatedLine = null;
   state.currentLines = [];
@@ -1075,6 +1141,52 @@ function handleBet() {
 function toggleDeleteMode() {
   state.deleteMode = !state.deleteMode;
   renderHistory();
+}
+
+function setHistoryFilterOpen(open) {
+  els.historyFilter.classList.toggle("is-open", open);
+  els.historyFilterTrigger.setAttribute("aria-expanded", String(open));
+  els.historyFilterMenu.hidden = !open;
+}
+
+function setHistoryFilter(value) {
+  state.historyFilter = value;
+  state.historyPage = 1;
+  els.historyFilterLabel.textContent = HISTORY_FILTER_LABELS[value];
+  els.historyFilterOptions.forEach((option) => {
+    option.setAttribute("aria-selected", String(option.dataset.value === value));
+  });
+  setHistoryFilterOpen(false);
+  renderHistory();
+}
+
+function toggleHistoryFilter() {
+  const open = els.historyFilterTrigger.getAttribute("aria-expanded") !== "true";
+  setHistoryFilterOpen(open);
+}
+
+function handleHistoryFilterOption(event) {
+  setHistoryFilter(event.currentTarget.dataset.value);
+  els.historyFilterTrigger.focus();
+}
+
+function handleHistoryFilterKeydown(event) {
+  if (event.key === "Escape") {
+    setHistoryFilterOpen(false);
+    els.historyFilterTrigger.focus();
+    return;
+  }
+
+  if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+  event.preventDefault();
+  const currentIndex = els.historyFilterOptions.indexOf(document.activeElement);
+  const direction = event.key === "ArrowDown" ? 1 : -1;
+  const nextIndex = (currentIndex + direction + els.historyFilterOptions.length) % els.historyFilterOptions.length;
+  els.historyFilterOptions[nextIndex].focus();
+}
+
+function closeHistoryFilterFromOutside(event) {
+  if (!els.historyFilter.contains(event.target)) setHistoryFilterOpen(false);
 }
 
 async function loadData() {
@@ -1097,6 +1209,17 @@ function bindEvents() {
   els.aiPickBtn.addEventListener("click", handleAiPick);
   els.betBtn.addEventListener("click", handleBet);
   els.deleteToggle.addEventListener("click", toggleDeleteMode);
+  els.historyFilterTrigger.addEventListener("click", toggleHistoryFilter);
+  els.historyFilterTrigger.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown") return;
+    event.preventDefault();
+    setHistoryFilterOpen(true);
+    const selected = els.historyFilterOptions.find((option) => option.getAttribute("aria-selected") === "true");
+    selected?.focus();
+  });
+  els.historyFilterOptions.forEach((option) => option.addEventListener("click", handleHistoryFilterOption));
+  els.historyFilterMenu.addEventListener("keydown", handleHistoryFilterKeydown);
+  document.addEventListener("click", closeHistoryFilterFromOutside);
 }
 
 bindEvents();
