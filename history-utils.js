@@ -5,6 +5,41 @@
     "6m": 183,
     "1y": 365,
   };
+  const FIXED_PRIZE_AMOUNTS = {
+    三等奖: 3000,
+    四等奖: 200,
+    五等奖: 10,
+    六等奖: 5,
+    福运奖: 5,
+  };
+  const PRIZE_NAMES = {
+    1: "一等奖",
+    2: "二等奖",
+    3: "三等奖",
+    4: "四等奖",
+    5: "五等奖",
+    6: "六等奖",
+    7: "福运奖",
+  };
+
+  function normalizePrizeRows(rows) {
+    if (!Array.isArray(rows)) return {};
+    return rows.reduce((prizes, row) => {
+      const name = row?.name || PRIZE_NAMES[Number(row?.type)];
+      const amount = Number(String(row?.typemoney ?? row?.amount ?? "").replace(/,/g, ""));
+      if (name && Number.isFinite(amount) && amount > 0) prizes[name] = amount;
+      return prizes;
+    }, {});
+  }
+
+  function mergePrizeData(draws, rows) {
+    const byIssue = new Map((Array.isArray(rows) ? rows : []).map((row) => [String(row.issue), row]));
+    return draws.map((draw) => {
+      const row = byIssue.get(String(draw.issue));
+      const synced = normalizePrizeRows(row?.prizes || row?.prizegrades);
+      return { ...draw, prizes: { ...(draw.prizes || {}), ...synced } };
+    });
+  }
 
   function recordTimestamp(record) {
     const betAt = Date.parse(record?.betAt || "");
@@ -36,7 +71,65 @@
     };
   }
 
-  const api = { filterHistory, paginateHistory, matchedNumbers, recordTimestamp };
+  function evaluateLine(line, draw) {
+    if (!draw) return "未开奖";
+    const redHits = line.reds.filter((number) => draw.reds.includes(number)).length;
+    const blueHit = line.blue === draw.blue;
+
+    if (redHits === 6 && blueHit) return "一等奖";
+    if (redHits === 6) return "二等奖";
+    if (redHits === 5 && blueHit) return "三等奖";
+    if (redHits === 5 || (redHits === 4 && blueHit)) return "四等奖";
+    if (redHits === 4 || (redHits === 3 && blueHit)) return "五等奖";
+    if (blueHit && redHits <= 2) return "六等奖";
+    if (redHits === 3 && !blueHit) return "福运奖";
+    return "未中奖";
+  }
+
+  function prizeAmount(status, draw) {
+    const syncedAmount = Number(draw?.prizes?.[status]);
+    if (Number.isFinite(syncedAmount) && syncedAmount > 0) return syncedAmount;
+    return FIXED_PRIZE_AMOUNTS[status] ?? null;
+  }
+
+  function calculateWinningStats(records, draws, range, now = Date.now()) {
+    const drawByIssue = new Map(draws.map((draw) => [String(draw.issue), draw]));
+    const filtered = filterHistory(records, range, now);
+    let winCount = 0;
+    let totalAmount = 0;
+    let unresolvedAmountCount = 0;
+
+    filtered.forEach((record) => {
+      const draw = drawByIssue.get(String(record.issue));
+      if (!draw) return;
+
+      record.lines.forEach((line) => {
+        const status = evaluateLine(line, draw);
+        if (status === "未开奖" || status === "未中奖") return;
+        winCount += 1;
+        const amount = prizeAmount(status, draw);
+        if (amount === null) {
+          unresolvedAmountCount += 1;
+        } else {
+          totalAmount += amount;
+        }
+      });
+    });
+
+    return { winCount, totalAmount, unresolvedAmountCount };
+  }
+
+  const api = {
+    calculateWinningStats,
+    evaluateLine,
+    filterHistory,
+    matchedNumbers,
+    mergePrizeData,
+    normalizePrizeRows,
+    paginateHistory,
+    prizeAmount,
+    recordTimestamp,
+  };
   root.HistoryUtils = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>双色球选号</title>
-    <link rel="stylesheet" href="./styles.css?v=20260617-filter-v2" />
+    <link rel="stylesheet" href="./styles.css?v=20260617-stats-v1" />
   </head>
   <body>
     <main class="page-shell">
@@ -83,13 +83,24 @@
             </button>
           </div>
         </div>
+        <div class="winning-stats" aria-label="中奖数据统计">
+          <div class="winning-stat">
+            <span>累计中奖</span>
+            <strong id="winningCount">0次</strong>
+          </div>
+          <div class="winning-stat">
+            <span>累计中奖金额</span>
+            <strong id="winningAmount">¥0</strong>
+          </div>
+          <p class="winning-stats-note" id="winningStatsNote" hidden>浮动奖金同步中</p>
+        </div>
         <div class="history-list" id="historyList">
           <div class="history-empty">暂无投注记录</div>
         </div>
       </section>
     </main>
 
-    <script src="./history-utils.js?v=20260617-filter-v2"></script>
-    <script src="./app.js?v=20260617-filter-v2"></script>
+    <script src="./history-utils.js?v=20260617-stats-v1"></script>
+    <script src="./app.js?v=20260617-stats-v1"></script>
   </body>
 </html>

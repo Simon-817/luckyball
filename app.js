@@ -19,6 +19,7 @@ const CDN_DATA_URL =
 const OFFICIAL_DATA_URL =
   "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=&issueStart=&issueEnd=&dayStart=&dayEnd=&pageNo=1&pageSize=30&week=&systemType=PC";
 const DATA_SOURCES = [DATA_URL, CDN_DATA_URL, OFFICIAL_DATA_URL];
+const PRIZE_DATA_URL = "./data/lottery_prizes.json";
 
 const FIXED_LINES = [
   { reds: [5, 22, 24, 26, 29, 32], blue: 12, type: "fixed" },
@@ -114,6 +115,9 @@ const els = {
   historyFilterMenu: document.querySelector("#historyFilterMenu"),
   historyFilterOptions: [...document.querySelectorAll("#historyFilterMenu [role='option']")],
   deleteToggle: document.querySelector("#deleteToggle"),
+  winningCount: document.querySelector("#winningCount"),
+  winningAmount: document.querySelector("#winningAmount"),
+  winningStatsNote: document.querySelector("#winningStatsNote"),
 };
 
 function range(start, end) {
@@ -172,6 +176,7 @@ function normalizeDraw(raw) {
     date: normalizeDate(raw.date || raw.openTime),
     reds,
     blue,
+    prizes: HistoryUtils.normalizePrizeRows(raw.prizegrades || raw.prizes),
   };
 }
 
@@ -223,6 +228,15 @@ async function fetchLotteryHistory() {
 
   if (merged.length < HISTORY_WINDOW) throw new Error("可用开奖记录不足");
   return merged;
+}
+
+async function fetchPrizeHistory() {
+  const response = await fetch(appendCacheBust(PRIZE_DATA_URL), { cache: "no-store" });
+  if (!response.ok) throw new Error(`奖金数据响应 ${response.status}`);
+  const payload = await response.json();
+  const rows = Array.isArray(payload) ? payload : payload.data;
+  if (!Array.isArray(rows)) throw new Error("奖金数据格式不正确");
+  return rows;
 }
 
 function chinaParts(timestamp = Date.now()) {
@@ -983,21 +997,6 @@ function renderLatestDraw() {
   els.latestDrawCard.append(balls);
 }
 
-function evaluateLine(line, draw) {
-  if (!draw) return "未开奖";
-  const redHits = line.reds.filter((num) => draw.reds.includes(num)).length;
-  const blueHit = line.blue === draw.blue;
-
-  if (redHits === 6 && blueHit) return "一等奖";
-  if (redHits === 6) return "二等奖";
-  if (redHits === 5 && blueHit) return "三等奖";
-  if (redHits === 5 || (redHits === 4 && blueHit)) return "四等奖";
-  if (redHits === 4 || (redHits === 3 && blueHit)) return "五等奖";
-  if (blueHit && redHits <= 2) return "六等奖";
-  if (redHits === 3 && !blueHit) return "福运奖";
-  return "未中奖";
-}
-
 function statusClass(status) {
   if (status === "未开奖") return "pending";
   if (status === "未中奖") return "lose";
@@ -1008,7 +1007,17 @@ function drawForIssue(issue) {
   return state.draws.find((draw) => draw.issue === String(issue));
 }
 
+function renderWinningStats() {
+  const stats = HistoryUtils.calculateWinningStats(state.history, state.draws, state.historyFilter);
+  els.winningCount.textContent = `${stats.winCount}次`;
+  els.winningAmount.textContent = stats.unresolvedAmountCount
+    ? "待同步"
+    : `¥${stats.totalAmount.toLocaleString("zh-CN")}`;
+  els.winningStatsNote.hidden = stats.unresolvedAmountCount === 0;
+}
+
 function renderHistory() {
+  renderWinningStats();
   els.deleteToggle.classList.toggle("is-active", state.deleteMode);
   els.deleteToggle.setAttribute("aria-label", state.deleteMode ? "完成删除" : "删除投注记录");
   const expectedLatestIssue = getExpectedLatestIssue();
@@ -1036,7 +1045,9 @@ function renderHistory() {
     const draw = Number(record.issue) <= Number(expectedLatestIssue) ? drawForIssue(record.issue) : null;
     record.lines.forEach((line, index) => {
       const row = document.createElement("div");
-      const status = Number(record.issue) > Number(expectedLatestIssue) || !draw ? "未开奖" : evaluateLine(line, draw);
+      const status = Number(record.issue) > Number(expectedLatestIssue) || !draw
+        ? "未开奖"
+        : HistoryUtils.evaluateLine(line, draw);
       row.className = "history-line";
       const label = document.createElement("span");
       label.className = "history-line-label";
@@ -1198,6 +1209,12 @@ async function loadData() {
     state.draws = normalizeHistory(FALLBACK_DRAWS);
   } finally {
     state.loadingDraw = false;
+  }
+
+  try {
+    state.draws = HistoryUtils.mergePrizeData(state.draws, await fetchPrizeHistory());
+  } catch {
+    // Fixed prize tiers still calculate locally; floating tiers stay explicitly unresolved.
   }
 
   state.latestDraw = state.draws[0];
