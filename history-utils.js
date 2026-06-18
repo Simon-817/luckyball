@@ -22,6 +22,14 @@
     7: "福运奖",
   };
 
+  function toNumber(value) {
+    return Number(String(value).replace(/\D/g, ""));
+  }
+
+  function pad(num) {
+    return String(num).padStart(2, "0");
+  }
+
   function normalizePrizeRows(rows) {
     if (!Array.isArray(rows)) return {};
     return rows.reduce((prizes, row) => {
@@ -30,6 +38,59 @@
       if (name && Number.isFinite(amount) && amount > 0) prizes[name] = amount;
       return prizes;
     }, {});
+  }
+
+  function normalizeDate(dateText) {
+    const match = String(dateText || "").match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}/);
+    if (!match) return "";
+    const [year, month, day] = match[0].replace(/\//g, "-").split("-").map(Number);
+    return `${year}-${pad(month)}-${pad(day)}`;
+  }
+
+  function parseHtmlDrawsWithDom(html) {
+    if (typeof DOMParser === "undefined") return [];
+    const document = new DOMParser().parseFromString(String(html || ""), "text/html");
+    return [...document.querySelectorAll("tr")]
+      .map((row) => {
+        const cells = [...row.querySelectorAll("td")];
+        if (cells.length < 3) return null;
+        const issue = String(cells[0].textContent || "").match(/\d{7}/)?.[0] || "";
+        const date = normalizeDate(cells[1].textContent);
+        const reds = [...cells[2].querySelectorAll(".rbl, .rb")]
+          .map((ball) => toNumber(ball.textContent))
+          .filter((num) => num >= 1 && num <= 33)
+          .slice(0, 6);
+        const blue = toNumber(cells[2].querySelector(".bbl, .bb")?.textContent || "");
+        return issue && date && reds.length === 6 && blue >= 1 && blue <= 16
+          ? { issue, date, reds, blue, prizes: {} }
+          : null;
+      })
+      .filter(Boolean);
+  }
+
+  function parseHtmlDrawsWithRegex(html) {
+    return String(html || "")
+      .match(/<tr[\s\S]*?<\/tr>/gi)
+      ?.map((row) => {
+        const cells = row.match(/<td[\s\S]*?<\/td>/gi) || [];
+        if (cells.length < 3) return null;
+        const issue = cells[0].match(/\d{7}/)?.[0] || "";
+        const date = normalizeDate(cells[1]);
+        const reds = [...cells[2].matchAll(/<b\b[^>]*class=["'][^"']*\brbl\b[^"']*["'][^>]*>(\d{1,2})<\/b>/gi)]
+          .map((match) => toNumber(match[1]))
+          .filter((num) => num >= 1 && num <= 33)
+          .slice(0, 6);
+        const blue = toNumber(cells[2].match(/<b\b[^>]*class=["'][^"']*\bbbl\b[^"']*["'][^>]*>(\d{1,2})<\/b>/i)?.[1] || "");
+        return issue && date && reds.length === 6 && blue >= 1 && blue <= 16
+          ? { issue, date, reds, blue, prizes: {} }
+          : null;
+      })
+      .filter(Boolean) || [];
+  }
+
+  function parseHtmlDraws(html) {
+    const domDraws = parseHtmlDrawsWithDom(html);
+    return domDraws.length ? domDraws : parseHtmlDrawsWithRegex(html);
   }
 
   function mergePrizeData(draws, rows) {
@@ -126,6 +187,7 @@
     matchedNumbers,
     mergePrizeData,
     normalizePrizeRows,
+    parseHtmlDraws,
     paginateHistory,
     prizeAmount,
     recordTimestamp,

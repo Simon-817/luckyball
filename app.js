@@ -18,7 +18,8 @@ const CDN_DATA_URL =
   "https://cdn.jsdelivr.net/gh/sinyu1012/Double-Color-Ball-AI@main/data/lottery_history.json";
 const OFFICIAL_DATA_URL =
   "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=&issueStart=&issueEnd=&dayStart=&dayEnd=&pageNo=1&pageSize=30&week=&systemType=PC";
-const DATA_SOURCES = [DATA_URL, CDN_DATA_URL, OFFICIAL_DATA_URL];
+const HTML_DATA_URL = "https://www.17500.cn/kj/list-ssq.html";
+const DATA_SOURCES = [DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFFICIAL_DATA_URL];
 const PRIZE_DATA_URL = "./data/lottery_prizes.json";
 
 const FIXED_LINES = [
@@ -180,7 +181,8 @@ function normalizeDraw(raw) {
   };
 }
 
-function normalizeHistory(payload) {
+function normalizeHistory(payload, options = {}) {
+  const { requireWindow = true } = options;
   const rows = Array.isArray(payload) ? payload : payload.data || payload.result;
   if (!Array.isArray(rows)) throw new Error("开奖记录格式不正确");
 
@@ -189,8 +191,19 @@ function normalizeHistory(payload) {
     .filter((draw) => draw.reds.length === 6 && draw.blue >= BLUE_MIN && draw.blue <= BLUE_MAX)
     .sort((a, b) => Number(b.issue) - Number(a.issue));
 
-  if (draws.length < HISTORY_WINDOW) throw new Error("最近30期数据不足");
+  if (requireWindow && draws.length < HISTORY_WINDOW) throw new Error("最近30期数据不足");
   return draws;
+}
+
+function parseDataSourcePayload(text, contentType = "") {
+  const trimmed = String(text || "").trim();
+  if (contentType.includes("json") || /^[\[{]/.test(trimmed)) {
+    return normalizeHistory(JSON.parse(trimmed), { requireWindow: false });
+  }
+
+  const draws = HistoryUtils.parseHtmlDraws(trimmed);
+  if (!draws.length) throw new Error("HTML开奖记录格式不正确");
+  return normalizeHistory(draws, { requireWindow: false });
 }
 
 function appendCacheBust(url) {
@@ -214,7 +227,7 @@ async function fetchDataSource(url) {
   try {
     const response = await fetch(appendCacheBust(url), { cache: "no-store", signal: controller.signal });
     if (!response.ok) throw new Error(`接口响应 ${response.status}`);
-    return normalizeHistory(await response.json());
+    return parseDataSourcePayload(await response.text(), response.headers.get("content-type") || "");
   } finally {
     clearTimeout(timer);
   }

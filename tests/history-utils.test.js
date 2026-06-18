@@ -8,6 +8,7 @@ const {
   calculateWinningStats,
   mergePrizeData,
   normalizePrizeRows,
+  parseHtmlDraws,
 } = require("../history-utils.js");
 
 const NOW = Date.parse("2026-06-17T12:00:00+08:00");
@@ -140,5 +141,31 @@ test("synced prize data is merged into the matching draw without losing balls", 
     reds: [3, 5, 16, 18, 29, 32],
     blue: 4,
     prizes: { 一等奖: 5649404, 二等奖: 295664 },
+  }]);
+});
+
+test("html draw list rows are parsed into normalized draw records", () => {
+  const html = `
+    <table>
+      <tr>
+        <td>2026069</td>
+        <td>2026-06-18</td>
+        <td>
+          <p class="ball flex big">
+            <b class="rbl fred">12</b><b class="rbl fred">14</b><b class="rbl fred">16</b>
+            <b class="rbl fred">17</b><b class="rbl fred">18</b><b class="rbl fred">32</b>
+            <b class="bbl fblue">08</b>
+          </p>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  assert.deepEqual(parseHtmlDraws(html), [{
+    issue: "2026069",
+    date: "2026-06-18",
+    reds: [12, 14, 16, 17, 18, 32],
+    blue: 8,
+    prizes: {},
   }]);
 });
