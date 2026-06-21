@@ -12,6 +12,7 @@ const HISTORY_FILTER_LABELS = {
 };
 const CHINA_OFFSET_MS = 8 * 60 * 60 * 1000;
 const STORAGE_KEY = "ssq-bet-history-v1";
+const RESTORED_HISTORY_MARKER_KEY = globalThis.RestoredHistory?.RESTORED_HISTORY_MARKER_KEY;
 const DATA_URL =
   "https://raw.githubusercontent.com/sinyu1012/Double-Color-Ball-AI/main/data/lottery_history.json";
 const CDN_DATA_URL =
@@ -1125,6 +1126,21 @@ function loadHistory() {
       : [];
   } catch {
     state.history = [];
+  }
+
+  const restoredRecords = globalThis.RestoredHistory?.RESTORED_HISTORY_RECORDS || [];
+  if (
+    !state.history.length &&
+    restoredRecords.length &&
+    RESTORED_HISTORY_MARKER_KEY &&
+    !localStorage.getItem(RESTORED_HISTORY_MARKER_KEY)
+  ) {
+    state.history = restoredRecords.map((record) => ({
+      ...record,
+      lines: record.lines.map((line) => ({ ...line, reds: [...line.reds] })),
+    }));
+    saveHistory();
+    if (RESTORED_HISTORY_MARKER_KEY) localStorage.setItem(RESTORED_HISTORY_MARKER_KEY, "1");
   }
 }
 
