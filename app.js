@@ -22,11 +22,7 @@ const OFFICIAL_DATA_URL =
 const HTML_DATA_URL = "https://www.17500.cn/kj/list-ssq.html";
 const DATA_SOURCES = [DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFFICIAL_DATA_URL];
 const PRIZE_DATA_URL = "./data/lottery_prizes.json";
-
-const FIXED_LINES = [
-  { reds: [5, 22, 24, 26, 29, 32], blue: 12, type: "fixed" },
-  { reds: [6, 12, 17, 20, 28, 31], blue: 14, type: "fixed" },
-];
+const CURRENT_PICK_COUNT = 3;
 
 const ZONES = [
   { id: 1, range: [1, 6] },
@@ -913,6 +909,10 @@ function generateAiLine() {
   };
 }
 
+function generateAiLines(count = CURRENT_PICK_COUNT) {
+  return Array.from({ length: count }, () => generateAiLine());
+}
+
 function randomBlue() {
   return randomInt(BLUE_MIN, BLUE_MAX);
 }
@@ -1149,9 +1149,9 @@ function saveHistory() {
 }
 
 function handleAiPick() {
-  const line = generateAiLine();
-  state.generatedLine = line;
-  state.currentLines = [line, ...FIXED_LINES.map((item) => ({ ...item, reds: [...item.reds] }))];
+  const lines = generateAiLines();
+  state.generatedLine = lines[0];
+  state.currentLines = lines;
   renderGenerator();
   renderCurrentBet();
 }
