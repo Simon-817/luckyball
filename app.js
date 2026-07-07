@@ -23,6 +23,38 @@ const HTML_DATA_URL = "https://www.17500.cn/kj/list-ssq.html";
 const DATA_SOURCES = [DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFFICIAL_DATA_URL];
 const PRIZE_DATA_URL = "./data/lottery_prizes.json";
 const CURRENT_PICK_COUNT = 3;
+const MAX_SHARED_REDS_PER_LINE = 2;
+const MAX_RED_APPEARANCES_PER_PICK = 2;
+const ANTI_BIRTHDAY_REDS = [32, 33];
+const RED_BANDS = {
+  small: [1, 11],
+  middle: [12, 22],
+  large: [23, 33],
+};
+
+const STRATEGY_LINE_PROFILES = [
+  {
+    id: "balanced",
+    blueRange: [1, 5],
+    bandCounts: { small: 2, middle: 2, large: 2 },
+    requireAntiBirthday: true,
+  },
+  {
+    id: "low-overlap",
+    blueRange: [6, 11],
+    excludeFirstLine: true,
+    bandCounts: { small: 2, middle: [1, 2], large: [2, 3] },
+    requireAntiBirthday: true,
+  },
+  {
+    id: "coverage",
+    blueRange: [12, 16],
+    preferUnusedReds: true,
+    parityOddCounts: [2, 3],
+    requireAtLeastThirty: true,
+    requireAntiBirthday: true,
+  },
+];
 
 const ZONES = [
   { id: 1, range: [1, 6] },
@@ -665,6 +697,58 @@ function countPairs(nums, predicate) {
   return count;
 }
 
+function countInRange(nums, rangeBounds) {
+  const [min, max] = rangeBounds;
+  return nums.filter((num) => num >= min && num <= max).length;
+}
+
+function numsInBand(bandName) {
+  return range(RED_BANDS[bandName][0], RED_BANDS[bandName][1]);
+}
+
+function resolveBandCounts(profile) {
+  if (!profile.bandCounts) return null;
+
+  const counts = {};
+  Object.entries(profile.bandCounts).forEach(([bandName, value]) => {
+    counts[bandName] = Array.isArray(value) ? randomInt(value[0], value[1]) : value;
+  });
+
+  const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+  if (total === 6) return counts;
+
+  if (counts.large !== undefined) counts.large += 6 - total;
+  return counts;
+}
+
+function lineRedCounts(lines) {
+  return redAppearanceMap(lines);
+}
+
+function canUseRed(num, selectedLines, excluded = new Set()) {
+  const appearances = lineRedCounts(selectedLines).get(num) || 0;
+  return !excluded.has(num) && appearances < MAX_RED_APPEARANCES_PER_PICK;
+}
+
+function chooseAntiBirthdayRed(settings, selectedLines, excluded = new Set()) {
+  const pool = ANTI_BIRTHDAY_REDS.filter((num) => canUseRed(num, selectedLines, excluded));
+  if (!pool.length) return null;
+  return weightedSample(pool, 1, (num) => socialWeight(num) * tempWeight(num, settings))[0] || null;
+}
+
+function structuredWeight(num, settings, picked, selectedLines, profile) {
+  const usedBefore = selectedLines.some((line) => line.reds.includes(num));
+  const reusePenalty = profile.preferUnusedReds && usedBefore ? 0.08 : 1;
+  return socialWeight(num) * tempWeight(num, settings) * spacingPenalty(num, picked) * reusePenalty;
+}
+
+function pickStructuredReds(pool, count, settings, picked, selectedLines, profile) {
+  const available = pool.filter((num) => !picked.includes(num) && canUseRed(num, selectedLines));
+  return weightedSample(available, count, (num, localPicked) => {
+    return structuredWeight(num, settings, [...picked, ...localPicked], selectedLines, profile);
+  });
+}
+
 function hasTailLadder(nums) {
   const tailGroups = new Map();
   nums.forEach((num) => {
@@ -859,13 +943,15 @@ function chooseTopCandidate(candidates, targetShadowCount = null) {
   return weightedPick(top.map((item, index) => [item, Math.max(1, top.length - index)]));
 }
 
-function generateAiLine() {
-  const settings = readSettings();
-  const targetShadowCount = weightedPick([
+function chooseTargetShadowCount() {
+  return weightedPick([
     [0, 0.05],
     [1, 0.7],
     [2, 0.25],
   ]);
+}
+
+function collectCandidateLines(settings, targetShadowCount = null) {
   const candidates = [];
 
   for (let attempt = 0; attempt < HYBRID_CONFIG.candidatePoolSize; attempt += 1) {
@@ -894,8 +980,10 @@ function generateAiLine() {
     if (candidate) candidates.push(candidate);
   }
 
-  if (candidates.length) return chooseTopCandidate(candidates);
+  return candidates;
+}
 
+function buildFallbackLine(settings) {
   const fallbackReds = weightedSample(range(RED_MIN, RED_MAX), 6, (num, picked) => {
     return socialWeight(num) * spacingPenalty(num, picked) * tempWeight(num, settings);
   }).sort((a, b) => a - b);
@@ -909,12 +997,215 @@ function generateAiLine() {
   };
 }
 
-function generateAiLines(count = CURRENT_PICK_COUNT) {
-  return Array.from({ length: count }, () => generateAiLine());
+function excludedRedsForProfile(profile, selectedLines) {
+  if (profile.excludeFirstLine && selectedLines[0]) return new Set(selectedLines[0].reds);
+  return new Set();
 }
 
-function randomBlue() {
-  return randomInt(BLUE_MIN, BLUE_MAX);
+function buildBandStructuredReds(settings, profile, selectedLines) {
+  const counts = resolveBandCounts(profile);
+  const excluded = excludedRedsForProfile(profile, selectedLines);
+  const picked = [];
+
+  if (profile.requireAntiBirthday) {
+    const anchor = chooseAntiBirthdayRed(settings, selectedLines, excluded);
+    if (!anchor) return null;
+    picked.push(anchor);
+  }
+
+  Object.entries(counts).forEach(([bandName, targetCount]) => {
+    const currentCount = countInRange(picked, RED_BANDS[bandName]);
+    const needed = Math.max(0, targetCount - currentCount);
+    if (!needed) return;
+
+    const pool = numsInBand(bandName).filter((num) => !excluded.has(num));
+    picked.push(...pickStructuredReds(pool, needed, settings, picked, selectedLines, profile));
+  });
+
+  if (picked.length !== 6) return null;
+  return [...picked].sort((a, b) => a - b);
+}
+
+function buildCoverageStructuredReds(settings, profile, selectedLines) {
+  const used = new Set(selectedLines.flatMap((line) => line.reds));
+  const picked = [];
+
+  if (profile.requireAntiBirthday) {
+    const anchor = chooseAntiBirthdayRed(settings, selectedLines);
+    if (!anchor) return null;
+    picked.push(anchor);
+  }
+
+  const preferredPool = range(RED_MIN, RED_MAX).filter((num) => !used.has(num));
+  picked.push(...pickStructuredReds(preferredPool, 6 - picked.length, settings, picked, selectedLines, profile));
+
+  if (picked.length < 6) {
+    picked.push(...pickStructuredReds(range(RED_MIN, RED_MAX), 6 - picked.length, settings, picked, selectedLines, profile));
+  }
+
+  if (picked.length !== 6) return null;
+  return [...picked].sort((a, b) => a - b);
+}
+
+function isStructuredRedsValid(reds, profile, selectedLines) {
+  if (!reds || new Set(reds).size !== 6) return false;
+  if (maxRunLength(reds) >= 3) return false;
+  if (hasArithmeticRun(reds, 4)) return false;
+  if (hasTailLadder(reds)) return false;
+  if (profile.requireAntiBirthday && countInRange(reds, [32, 33]) !== 1) return false;
+  if (profile.requireAtLeastThirty && !reds.some((num) => num >= 30)) return false;
+  if (profile.parityOddCounts && !profile.parityOddCounts.includes(reds.filter((num) => num % 2 === 1).length)) {
+    return false;
+  }
+  if (profile.excludeFirstLine && selectedLines[0]?.reds.some((num) => reds.includes(num))) return false;
+
+  if (profile.bandCounts) {
+    const bandCountsOk = Object.entries(profile.bandCounts).every(([bandName, value]) => {
+      const expected = Array.isArray(value) ? value : [value, value];
+      const actual = countInRange(reds, RED_BANDS[bandName]);
+      return actual >= expected[0] && actual <= expected[1];
+    });
+    if (!bandCountsOk) return false;
+  }
+
+  return isDiverseCandidate({ reds }, selectedLines);
+}
+
+function buildStructuredCandidate(settings, profile, selectedLines) {
+  const reds = profile.bandCounts
+    ? buildBandStructuredReds(settings, profile, selectedLines)
+    : buildCoverageStructuredReds(settings, profile, selectedLines);
+
+  if (!isStructuredRedsValid(reds, profile, selectedLines)) return null;
+
+  const relaxedAnalysis = analyzeReds(reds, settings, new Set(), ZONES, true);
+  return {
+    reds,
+    blue: randomBlue(profile.blueRange),
+    type: "ai",
+    entropyScore: relaxedAnalysis.entropyScore,
+    strategyScore: scoreCandidate(reds, relaxedAnalysis, ZONES),
+    meta: {
+      profile: profile.id,
+      shadowCount: relaxedAnalysis.shadowCount,
+      warmingCount: relaxedAnalysis.warmingCount,
+      coolNeighborCount: relaxedAnalysis.coolNeighborCount,
+    },
+  };
+}
+
+function buildStructuredLine(settings, profile, selectedLines) {
+  const candidates = [];
+
+  for (let attempt = 0; attempt < HYBRID_CONFIG.candidatePoolSize * 3; attempt += 1) {
+    const candidate = buildStructuredCandidate(settings, profile, selectedLines);
+    if (candidate) candidates.push(candidate);
+  }
+
+  if (!candidates.length) return null;
+  return chooseDiverseCandidate(candidates, selectedLines);
+}
+
+function redOverlapCount(left, right) {
+  const rightSet = new Set(right);
+  return left.filter((num) => rightSet.has(num)).length;
+}
+
+function redAppearanceMap(lines) {
+  const counts = new Map();
+  lines.forEach((line) => {
+    line.reds.forEach((num) => counts.set(num, (counts.get(num) || 0) + 1));
+  });
+  return counts;
+}
+
+function zoneSignature(reds, zones = ZONES) {
+  return [...zoneDistribution(reds, zones).values()].join("-");
+}
+
+function isDiverseCandidate(candidate, selectedLines) {
+  const pairOverlapsOk = selectedLines.every((line) => (
+    redOverlapCount(candidate.reds, line.reds) <= MAX_SHARED_REDS_PER_LINE
+  ));
+  const redAppearancesOk = [...redAppearanceMap([...selectedLines, candidate]).values()]
+    .every((count) => count <= MAX_RED_APPEARANCES_PER_PICK);
+
+  return pairOverlapsOk && redAppearancesOk;
+}
+
+function lineDiversityPenalty(candidate, selectedLines) {
+  if (!selectedLines.length) return 0;
+
+  const redCounts = redAppearanceMap(selectedLines);
+  const repeatedReds = candidate.reds.filter((num) => redCounts.has(num)).length;
+  const overusedReds = candidate.reds.filter((num) => (redCounts.get(num) || 0) >= MAX_RED_APPEARANCES_PER_PICK).length;
+  const maxOverlap = Math.max(...selectedLines.map((line) => redOverlapCount(candidate.reds, line.reds)));
+  const sameZoneSignature = selectedLines.filter((line) => zoneSignature(line.reds) === zoneSignature(candidate.reds)).length;
+
+  return repeatedReds * 5 + overusedReds * 28 + Math.max(0, maxOverlap - 1) * 12 + sameZoneSignature * 18;
+}
+
+function chooseDiverseCandidate(candidates, selectedLines, targetShadowCount = null) {
+  const scoped = targetShadowCount === null
+    ? candidates
+    : candidates.filter((item) => item.meta?.shadowCount === targetShadowCount);
+  const targetPool = scoped.length ? scoped : candidates;
+  const diversePool = targetPool.filter((candidate) => isDiverseCandidate(candidate, selectedLines));
+  const pool = diversePool.length ? diversePool : targetPool;
+  const sorted = [...pool].sort((a, b) => {
+    const aScore = a.strategyScore + a.entropyScore * 0.1 - lineDiversityPenalty(a, selectedLines);
+    const bScore = b.strategyScore + b.entropyScore * 0.1 - lineDiversityPenalty(b, selectedLines);
+    return bScore - aScore || b.strategyScore - a.strategyScore || b.entropyScore - a.entropyScore;
+  });
+  const top = sorted.slice(0, Math.min(12, sorted.length));
+  return weightedPick(top.map((item, index) => [item, Math.max(1, top.length - index)]));
+}
+
+function chooseGroupLine(settings, selectedLines, targetShadowCount = chooseTargetShadowCount()) {
+  const profile = STRATEGY_LINE_PROFILES[selectedLines.length];
+  if (profile) {
+    const structuredLine = buildStructuredLine(settings, profile, selectedLines);
+    if (structuredLine) return structuredLine;
+  }
+
+  const allCandidates = [];
+  const targetAttempts = [targetShadowCount, null, chooseTargetShadowCount(), null, chooseTargetShadowCount()];
+
+  for (const target of targetAttempts) {
+    const candidates = collectCandidateLines(settings, target);
+    allCandidates.push(...candidates);
+    const diverseCandidates = candidates.filter((candidate) => isDiverseCandidate(candidate, selectedLines));
+    if (diverseCandidates.length) return chooseDiverseCandidate(diverseCandidates, selectedLines, target);
+  }
+
+  const diverseCandidates = allCandidates.filter((candidate) => isDiverseCandidate(candidate, selectedLines));
+  if (diverseCandidates.length) return chooseDiverseCandidate(diverseCandidates, selectedLines);
+  if (allCandidates.length) return chooseDiverseCandidate(allCandidates, selectedLines);
+  return buildFallbackLine(settings);
+}
+
+function generateAiLine() {
+  const settings = readSettings();
+  const targetShadowCount = chooseTargetShadowCount();
+  const candidates = collectCandidateLines(settings, targetShadowCount);
+
+  if (candidates.length) return chooseTopCandidate(candidates, targetShadowCount);
+  return buildFallbackLine(settings);
+}
+
+function generateAiLines(count = CURRENT_PICK_COUNT) {
+  const settings = readSettings();
+  const lines = [];
+
+  while (lines.length < count) {
+    lines.push(chooseGroupLine(settings, lines));
+  }
+
+  return lines;
+}
+
+function randomBlue(bounds = [BLUE_MIN, BLUE_MAX]) {
+  return randomInt(bounds[0], bounds[1]);
 }
 
 function makeBall(num, color, placeholder = false) {
