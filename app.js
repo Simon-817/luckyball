@@ -13,6 +13,7 @@ const HISTORY_FILTER_LABELS = {
 const CHINA_OFFSET_MS = 8 * 60 * 60 * 1000;
 const STORAGE_KEY = "ssq-bet-history-v1";
 const RESTORED_HISTORY_MARKER_KEY = globalThis.RestoredHistory?.RESTORED_HISTORY_MARKER_KEY;
+const LOCAL_DATA_URL = "./data/lottery_history.json";
 const DATA_URL =
   "https://raw.githubusercontent.com/sinyu1012/Double-Color-Ball-AI/main/data/lottery_history.json";
 const CDN_DATA_URL =
@@ -20,7 +21,7 @@ const CDN_DATA_URL =
 const OFFICIAL_DATA_URL =
   "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=&issueStart=&issueEnd=&dayStart=&dayEnd=&pageNo=1&pageSize=30&week=&systemType=PC";
 const HTML_DATA_URL = "https://www.17500.cn/kj/list-ssq.html";
-const DATA_SOURCES = [DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFFICIAL_DATA_URL];
+const DATA_SOURCES = [LOCAL_DATA_URL, DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFFICIAL_DATA_URL];
 const PRIZE_DATA_URL = "./data/lottery_prizes.json";
 const CURRENT_PICK_COUNT = 3;
 const MAX_SHARED_REDS_PER_LINE = 2;

@@ -54,6 +54,11 @@ test("AI pick flow generates three strategy lines without fixed picks", () => {
   assert.doesNotMatch(APP_JS, /FIXED_LINES\.map/);
 });
 
+test("draw history loads the same-origin synced data before external sources", () => {
+  assert.match(APP_JS, /const LOCAL_DATA_URL = "\.\/data\/lottery_history\.json";/);
+  assert.match(APP_JS, /const DATA_SOURCES = \[LOCAL_DATA_URL, DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFFICIAL_DATA_URL\];/);
+});
+
 test("AI pick flow diversifies the three generated lines as a group", () => {
   assert.match(APP_JS, /const MAX_SHARED_REDS_PER_LINE = 2;/);
   assert.match(APP_JS, /const MAX_RED_APPEARANCES_PER_PICK = 2;/);
