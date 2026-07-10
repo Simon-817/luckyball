@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-07-09T16:09:26+00:00",
+  "last_updated": "2026-07-10T06:07:38+00:00",
   "source": "中国福利彩票发行管理中心、17500.cn",
   "data": [
     {
@@ -14,6 +14,7 @@
         "28"
       ],
       "blue_ball": "06",
+      "poolMoney": 285632700,
       "prizegrades": []
     },
     {
@@ -28,6 +29,7 @@
         "25"
       ],
       "blue_ball": "04",
+      "poolMoney": 320076738,
       "prizegrades": []
     },
     {
@@ -42,6 +44,7 @@
         "25"
       ],
       "blue_ball": "07",
+      "poolMoney": 292048181,
       "prizegrades": []
     },
     {
@@ -56,6 +59,7 @@
         "30"
       ],
       "blue_ball": "01",
+      "poolMoney": 283183968,
       "prizegrades": []
     },
     {
@@ -70,6 +74,7 @@
         "32"
       ],
       "blue_ball": "04",
+      "poolMoney": 308183968,
       "prizegrades": []
     },
     {
@@ -84,6 +89,7 @@
         "21"
       ],
       "blue_ball": "08",
+      "poolMoney": 328183968,
       "prizegrades": []
     },
     {
@@ -98,6 +104,7 @@
         "21"
       ],
       "blue_ball": "01",
+      "poolMoney": 378183968,
       "prizegrades": []
     },
     {
@@ -112,6 +119,7 @@
         "33"
       ],
       "blue_ball": "05",
+      "poolMoney": 398183968,
       "prizegrades": []
     },
     {
@@ -126,6 +134,7 @@
         "27"
       ],
       "blue_ball": "08",
+      "poolMoney": 438183968,
       "prizegrades": []
     },
     {
@@ -140,6 +149,7 @@
         "32"
       ],
       "blue_ball": "08",
+      "poolMoney": 493183968,
       "prizegrades": []
     },
     {
@@ -154,7 +164,44 @@
         "32"
       ],
       "blue_ball": "04",
-      "prizegrades": []
+      "poolMoney": 588469423,
+      "prizegrades": [
+        {
+          "type": 1,
+          "typenum": "14",
+          "typemoney": "5649404"
+        },
+        {
+          "type": 2,
+          "typenum": "123",
+          "typemoney": "295664"
+        },
+        {
+          "type": 3,
+          "typenum": "2419",
+          "typemoney": "3000"
+        },
+        {
+          "type": 4,
+          "typenum": "73467",
+          "typemoney": "200"
+        },
+        {
+          "type": 5,
+          "typenum": "1350496",
+          "typemoney": "10"
+        },
+        {
+          "type": 6,
+          "typenum": "12095581",
+          "typemoney": "5"
+        },
+        {
+          "type": 7,
+          "typenum": "",
+          "typemoney": ""
+        }
+      ]
     },
     {
       "issue": "2026067",
@@ -168,6 +215,7 @@
         "32"
       ],
       "blue_ball": "13",
+      "poolMoney": 658469423,
       "prizegrades": [
         {
           "type": 1,
@@ -218,6 +266,7 @@
         "29"
       ],
       "blue_ball": "16",
+      "poolMoney": 671837950,
       "prizegrades": [
         {
           "type": 1,
@@ -268,6 +317,7 @@
         "32"
       ],
       "blue_ball": "02",
+      "poolMoney": 706837950,
       "prizegrades": [
         {
           "type": 1,
@@ -318,6 +368,7 @@
         "33"
       ],
       "blue_ball": "15",
+      "poolMoney": 741837950,
       "prizegrades": [
         {
           "type": 1,
@@ -368,6 +419,7 @@
         "31"
       ],
       "blue_ball": "02",
+      "poolMoney": 816837950,
       "prizegrades": [
         {
           "type": 1,
@@ -418,6 +470,7 @@
         "29"
       ],
       "blue_ball": "09",
+      "poolMoney": 909990283,
       "prizegrades": [
         {
           "type": 1,
@@ -468,6 +521,7 @@
         "28"
       ],
       "blue_ball": "07",
+      "poolMoney": 1009990273,
       "prizegrades": [
         {
           "type": 1,
@@ -518,6 +572,7 @@
         "27"
       ],
       "blue_ball": "11",
+      "poolMoney": 1049990273,
       "prizegrades": [
         {
           "type": 1,
@@ -568,6 +623,7 @@
         "30"
       ],
       "blue_ball": "15",
+      "poolMoney": 1139990273,
       "prizegrades": [
         {
           "type": 1,
@@ -618,6 +674,7 @@
         "30"
       ],
       "blue_ball": "01",
+      "poolMoney": 1154771516,
       "prizegrades": [
         {
           "type": 1,
@@ -668,6 +725,7 @@
         "30"
       ],
       "blue_ball": "07",
+      "poolMoney": 1199771516,
       "prizegrades": [
         {
           "type": 1,
@@ -718,6 +776,7 @@
         "33"
       ],
       "blue_ball": "05",
+      "poolMoney": 1229771516,
       "prizegrades": [
         {
           "type": 1,
@@ -768,6 +827,7 @@
         "33"
       ],
       "blue_ball": "13",
+      "poolMoney": 1237107160,
       "prizegrades": [
         {
           "type": 1,
@@ -818,6 +878,7 @@
         "33"
       ],
       "blue_ball": "02",
+      "poolMoney": 1251883761,
       "prizegrades": [
         {
           "type": 1,
@@ -868,6 +929,7 @@
         "14"
       ],
       "blue_ball": "02",
+      "poolMoney": 1276883761,
       "prizegrades": [
         {
           "type": 1,
@@ -918,6 +980,7 @@
         "31"
       ],
       "blue_ball": "11",
+      "poolMoney": 1306883761,
       "prizegrades": [
         {
           "type": 1,
@@ -968,6 +1031,7 @@
         "30"
       ],
       "blue_ball": "10",
+      "poolMoney": 1400262206,
       "prizegrades": [
         {
           "type": 1,
@@ -1018,6 +1082,7 @@
         "30"
       ],
       "blue_ball": "03",
+      "poolMoney": 1470262206,
       "prizegrades": [
         {
           "type": 1,
@@ -1068,6 +1133,7 @@
         "20"
       ],
       "blue_ball": "02",
+      "poolMoney": 1490262206,
       "prizegrades": [
         {
           "type": 1,
@@ -1118,6 +1184,7 @@
         "33"
       ],
       "blue_ball": "01",
+      "poolMoney": 1520262206,
       "prizegrades": [
         {
           "type": 1,
@@ -1168,6 +1235,7 @@
         "30"
       ],
       "blue_ball": "07",
+      "poolMoney": 1505111504,
       "prizegrades": [
         {
           "type": 1,
@@ -1218,6 +1286,7 @@
         "33"
       ],
       "blue_ball": "16",
+      "poolMoney": 1535111504,
       "prizegrades": [
         {
           "type": 1,
@@ -1268,6 +1337,7 @@
         "30"
       ],
       "blue_ball": "15",
+      "poolMoney": 1559981238,
       "prizegrades": [
         {
           "type": 1,
@@ -1318,6 +1388,7 @@
         "30"
       ],
       "blue_ball": "01",
+      "poolMoney": 1619981238,
       "prizegrades": [
         {
           "type": 1,
@@ -1368,6 +1439,7 @@
         "32"
       ],
       "blue_ball": "16",
+      "poolMoney": 1649981238,
       "prizegrades": [
         {
           "type": 1,
@@ -1418,6 +1490,7 @@
         "31"
       ],
       "blue_ball": "10",
+      "poolMoney": 1729981238,
       "prizegrades": [
         {
           "type": 1,
@@ -1468,6 +1541,7 @@
         "24"
       ],
       "blue_ball": "13",
+      "poolMoney": 1799981238,
       "prizegrades": [
         {
           "type": 1,
@@ -1518,6 +1592,7 @@
         "33"
       ],
       "blue_ball": "04",
+      "poolMoney": 1869981238,
       "prizegrades": [
         {
           "type": 1,
@@ -1568,6 +1643,7 @@
         "30"
       ],
       "blue_ball": "05",
+      "poolMoney": 1934981238,
       "prizegrades": [
         {
           "type": 1,
@@ -1618,6 +1694,7 @@
         "27"
       ],
       "blue_ball": "05",
+      "poolMoney": 1933841973,
       "prizegrades": [
         {
           "type": 1,
@@ -1668,6 +1745,7 @@
         "33"
       ],
       "blue_ball": "12",
+      "poolMoney": 1973841973,
       "prizegrades": [
         {
           "type": 1,
@@ -1718,6 +1796,7 @@
         "28"
       ],
       "blue_ball": "08",
+      "poolMoney": 2063784926,
       "prizegrades": [
         {
           "type": 1,
@@ -1768,6 +1847,7 @@
         "32"
       ],
       "blue_ball": "02",
+      "poolMoney": 2108784926,
       "prizegrades": [
         {
           "type": 1,
@@ -1818,6 +1898,7 @@
         "23"
       ],
       "blue_ball": "07",
+      "poolMoney": 2138784926,
       "prizegrades": [
         {
           "type": 1,
@@ -1868,6 +1949,7 @@
         "29"
       ],
       "blue_ball": "06",
+      "poolMoney": 2203784926,
       "prizegrades": [
         {
           "type": 1,
@@ -1918,6 +2000,7 @@
         "33"
       ],
       "blue_ball": "02",
+      "poolMoney": 2278784926,
       "prizegrades": [
         {
           "type": 1,
@@ -1968,6 +2051,7 @@
         "33"
       ],
       "blue_ball": "08",
+      "poolMoney": 2308784926,
       "prizegrades": [
         {
           "type": 1,
@@ -2018,6 +2102,7 @@
         "24"
       ],
       "blue_ball": "04",
+      "poolMoney": 2358784926,
       "prizegrades": [
         {
           "type": 1,
@@ -2068,6 +2153,7 @@
         "31"
       ],
       "blue_ball": "05",
+      "poolMoney": 2383784926,
       "prizegrades": [
         {
           "type": 1,
@@ -2118,6 +2204,7 @@
         "28"
       ],
       "blue_ball": "15",
+      "poolMoney": 2403784926,
       "prizegrades": [
         {
           "type": 1,
@@ -2168,6 +2255,7 @@
         "26"
       ],
       "blue_ball": "13",
+      "poolMoney": 2428784926,
       "prizegrades": [
         {
           "type": 1,
@@ -2218,6 +2306,7 @@
         "29"
       ],
       "blue_ball": "03",
+      "poolMoney": 2518926159,
       "prizegrades": [
         {
           "type": 1,
@@ -2268,6 +2357,7 @@
         "24"
       ],
       "blue_ball": "10",
+      "poolMoney": 2553926159,
       "prizegrades": [
         {
           "type": 1,
@@ -2318,6 +2408,7 @@
         "29"
       ],
       "blue_ball": "14",
+      "poolMoney": 2588926159,
       "prizegrades": [
         {
           "type": 1,
@@ -2368,6 +2459,7 @@
         "29"
       ],
       "blue_ball": "06",
+      "poolMoney": 2592273374,
       "prizegrades": [
         {
           "type": 1,
@@ -2418,6 +2510,7 @@
         "32"
       ],
       "blue_ball": "11",
+      "poolMoney": 2652273374,
       "prizegrades": [
         {
           "type": 1,
@@ -2468,6 +2561,7 @@
         "31"
       ],
       "blue_ball": "04",
+      "poolMoney": 2682273374,
       "prizegrades": [
         {
           "type": 1,
@@ -2518,6 +2612,7 @@
         "30"
       ],
       "blue_ball": "02",
+      "poolMoney": 2712273374,
       "prizegrades": [
         {
           "type": 1,
@@ -2568,6 +2663,7 @@
         "30"
       ],
       "blue_ball": "01",
+      "poolMoney": 2716368081,
       "prizegrades": [
         {
           "type": 1,
@@ -2618,6 +2714,7 @@
         "30"
       ],
       "blue_ball": "07",
+      "poolMoney": 2751368081,
       "prizegrades": [
         {
           "type": 1,
@@ -2668,6 +2765,7 @@
         "32"
       ],
       "blue_ball": "04",
+      "poolMoney": 2781368081,
       "prizegrades": [
         {
           "type": 1,
@@ -2718,6 +2816,7 @@
         "30"
       ],
       "blue_ball": "13",
+      "poolMoney": 2811368081,
       "prizegrades": [
         {
           "type": 1,
@@ -2768,6 +2867,7 @@
         "31"
       ],
       "blue_ball": "12",
+      "poolMoney": 2851368081,
       "prizegrades": [
         {
           "type": 1,
@@ -2818,6 +2918,7 @@
         "32"
       ],
       "blue_ball": "01",
+      "poolMoney": 2876368081,
       "prizegrades": [
         {
           "type": 1,
@@ -2868,6 +2969,7 @@
         "20"
       ],
       "blue_ball": "01",
+      "poolMoney": 2961315457,
       "prizegrades": [
         {
           "type": 1,
@@ -2918,6 +3020,7 @@
         "24"
       ],
       "blue_ball": "08",
+      "poolMoney": 2925358915,
       "prizegrades": [
         {
           "type": 1,
@@ -2968,6 +3071,7 @@
         "32"
       ],
       "blue_ball": "04",
+      "poolMoney": 2925771107,
       "prizegrades": [
         {
           "type": 1,
@@ -3018,6 +3122,7 @@
         "26"
       ],
       "blue_ball": "12",
+      "poolMoney": 2865932466,
       "prizegrades": [
         {
           "type": 1,
@@ -3068,6 +3173,7 @@
         "25"
       ],
       "blue_ball": "10",
+      "poolMoney": 2924245047,
       "prizegrades": [
         {
           "type": 1,
@@ -3118,6 +3224,7 @@
         "33"
       ],
       "blue_ball": "10",
+      "poolMoney": 2921931052,
       "prizegrades": [
         {
           "type": 1,
@@ -3168,6 +3275,7 @@
         "30"
       ],
       "blue_ball": "01",
+      "poolMoney": 2890464389,
       "prizegrades": [
         {
           "type": 1,
@@ -3218,6 +3326,7 @@
         "28"
       ],
       "blue_ball": "15",
+      "poolMoney": 2880241083,
       "prizegrades": [
         {
           "type": 1,
@@ -3268,6 +3377,7 @@
         "33"
       ],
       "blue_ball": "10",
+      "poolMoney": 2821524165,
       "prizegrades": [
         {
           "type": 1,
@@ -3318,6 +3428,7 @@
         "32"
       ],
       "blue_ball": "10",
+      "poolMoney": 2782271788,
       "prizegrades": [
         {
           "type": 1,
@@ -3368,6 +3479,7 @@
         "30"
       ],
       "blue_ball": "16",
+      "poolMoney": 2761523177,
       "prizegrades": [
         {
           "type": 1,
@@ -3418,6 +3530,7 @@
         "32"
       ],
       "blue_ball": "02",
+      "poolMoney": 2717326577,
       "prizegrades": [
         {
           "type": 1,
@@ -3468,6 +3581,7 @@
         "33"
       ],
       "blue_ball": "15",
+      "poolMoney": 2718022399,
       "prizegrades": [
         {
           "type": 1,
@@ -3518,6 +3632,7 @@
         "30"
       ],
       "blue_ball": "04",
+      "poolMoney": 2688298050,
       "prizegrades": [
         {
           "type": 1,
@@ -3568,6 +3683,7 @@
         "31"
       ],
       "blue_ball": "08",
+      "poolMoney": 2673213583,
       "prizegrades": [
         {
           "type": 1,
@@ -3618,6 +3734,7 @@
         "30"
       ],
       "blue_ball": "10",
+      "poolMoney": 2655142533,
       "prizegrades": [
         {
           "type": 1,
@@ -3668,6 +3785,7 @@
         "22"
       ],
       "blue_ball": "16",
+      "poolMoney": 2669426999,
       "prizegrades": [
         {
           "type": 1,
@@ -3718,6 +3836,7 @@
         "33"
       ],
       "blue_ball": "08",
+      "poolMoney": 2654856315,
       "prizegrades": [
         {
           "type": 1,
@@ -3768,6 +3887,7 @@
         "28"
       ],
       "blue_ball": "02",
+      "poolMoney": 2718302859,
       "prizegrades": [
         {
           "type": 1,
@@ -3818,6 +3938,7 @@
         "32"
       ],
       "blue_ball": "14",
+      "poolMoney": 2711897665,
       "prizegrades": [
         {
           "type": 1,
@@ -3868,6 +3989,7 @@
         "33"
       ],
       "blue_ball": "13",
+      "poolMoney": 2736534730,
       "prizegrades": [
         {
           "type": 1,
@@ -3918,6 +4040,7 @@
         "24"
       ],
       "blue_ball": "03",
+      "poolMoney": 2766563293,
       "prizegrades": [
         {
           "type": 1,
@@ -3968,6 +4091,7 @@
         "31"
       ],
       "blue_ball": "16",
+      "poolMoney": 2743073255,
       "prizegrades": [
         {
           "type": 1,
@@ -4018,6 +4142,7 @@
         "13"
       ],
       "blue_ball": "06",
+      "poolMoney": 2697873796,
       "prizegrades": [
         {
           "type": 1,
@@ -4068,6 +4193,7 @@
         "24"
       ],
       "blue_ball": "05",
+      "poolMoney": 2690606470,
       "prizegrades": [
         {
           "type": 1,
@@ -4118,6 +4244,7 @@
         "33"
       ],
       "blue_ball": "06",
+      "poolMoney": 2655816573,
       "prizegrades": [
         {
           "type": 1,
@@ -4168,6 +4295,7 @@
         "27"
       ],
       "blue_ball": "15",
+      "poolMoney": 2620027948,
       "prizegrades": [
         {
           "type": 1,
@@ -4218,6 +4346,7 @@
         "29"
       ],
       "blue_ball": "05",
+      "poolMoney": 2563690940,
       "prizegrades": [
         {
           "type": 1,
@@ -4268,6 +4397,7 @@
         "32"
       ],
       "blue_ball": "12",
+      "poolMoney": 2583189299,
       "prizegrades": [
         {
           "type": 1,
@@ -4318,6 +4448,7 @@
         "32"
       ],
       "blue_ball": "10",
+      "poolMoney": 2742951835,
       "prizegrades": [
         {
           "type": 1,
@@ -4368,6 +4499,7 @@
         "29"
       ],
       "blue_ball": "12",
+      "poolMoney": 2723830474,
       "prizegrades": [
         {
           "type": 1,
@@ -4418,6 +4550,7 @@
         "33"
       ],
       "blue_ball": "07",
+      "poolMoney": 2738063876,
       "prizegrades": [
         {
           "type": 1,
@@ -4468,6 +4601,7 @@
         "32"
       ],
       "blue_ball": "11",
+      "poolMoney": 2810082951,
       "prizegrades": [
         {
           "type": 1,
@@ -4518,6 +4652,7 @@
         "31"
       ],
       "blue_ball": "03",
+      "poolMoney": 2798991596,
       "prizegrades": [
         {
           "type": 1,
@@ -4568,6 +4703,7 @@
         "23"
       ],
       "blue_ball": "06",
+      "poolMoney": 2776600809,
       "prizegrades": [
         {
           "type": 1,
@@ -4597,56 +4733,6 @@
         {
           "type": 6,
           "typenum": "14880544",
-          "typemoney": "5"
-        },
-        {
-          "type": 7,
-          "typenum": "",
-          "typemoney": ""
-        }
-      ]
-    },
-    {
-      "issue": "2025129",
-      "date": "2025-11-09",
-      "red_balls": [
-        "03",
-        "04",
-        "07",
-        "13",
-        "20",
-        "30"
-      ],
-      "blue_ball": "03",
-      "prizegrades": [
-        {
-          "type": 1,
-          "typenum": "16",
-          "typemoney": "6390891"
-        },
-        {
-          "type": 2,
-          "typenum": "194",
-          "typemoney": "143390"
-        },
-        {
-          "type": 3,
-          "typenum": "1749",
-          "typemoney": "3000"
-        },
-        {
-          "type": 4,
-          "typenum": "87230",
-          "typemoney": "200"
-        },
-        {
-          "type": 5,
-          "typenum": "1599003",
-          "typemoney": "10"
-        },
-        {
-          "type": 6,
-          "typenum": "9591250",
           "typemoney": "5"
         },
         {

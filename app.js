@@ -207,6 +207,7 @@ function normalizeDraw(raw) {
     date: normalizeDate(raw.date || raw.openTime),
     reds,
     blue,
+    poolMoney: toNumber(raw.poolMoney || raw.poolmoney),
     prizes: HistoryUtils.normalizePrizeRows(raw.prizegrades || raw.prizes),
   };
 }

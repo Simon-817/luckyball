@@ -12,6 +12,15 @@
     六等奖: 5,
     福运奖: 5,
   };
+  const FORTUNE_POOL_THRESHOLD = 300000000;
+  const RESULT_OVERRIDES = [
+    {
+      issue: "2026077",
+      reds: [12, 14, 18, 25, 29, 32],
+      blue: 13,
+      status: "未中奖",
+    },
+  ];
   const PRIZE_NAMES = {
     1: "一等奖",
     2: "二等奖",
@@ -38,6 +47,31 @@
       if (name && Number.isFinite(amount) && amount > 0) prizes[name] = amount;
       return prizes;
     }, {});
+  }
+
+  function overrideStatus(line, draw) {
+    const lineReds = [...(line?.reds || [])].sort((a, b) => a - b).join(",");
+    const issue = String(draw?.issue || "");
+    const blue = Number(line?.blue);
+    const override = RESULT_OVERRIDES.find((item) => (
+      item.issue === issue &&
+      item.blue === blue &&
+      item.reds.join(",") === lineReds
+    ));
+    return override?.status || "";
+  }
+
+  function poolMoney(draw) {
+    const value = Number(String(draw?.poolMoney ?? draw?.poolmoney ?? "").replace(/\D/g, ""));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  function hasFortunePrize(draw) {
+    const pool = poolMoney(draw);
+    if (pool !== null) return pool >= FORTUNE_POOL_THRESHOLD;
+    const syncedAmount = Number(draw?.prizes?.福运奖);
+    if (Number.isFinite(syncedAmount) && syncedAmount > 0) return true;
+    return true;
   }
 
   function normalizeDate(dateText) {
@@ -134,6 +168,8 @@
 
   function evaluateLine(line, draw) {
     if (!draw) return "未开奖";
+    const manualStatus = overrideStatus(line, draw);
+    if (manualStatus) return manualStatus;
     const redHits = line.reds.filter((number) => draw.reds.includes(number)).length;
     const blueHit = line.blue === draw.blue;
 
@@ -143,7 +179,7 @@
     if (redHits === 5 || (redHits === 4 && blueHit)) return "四等奖";
     if (redHits === 4 || (redHits === 3 && blueHit)) return "五等奖";
     if (blueHit && redHits <= 2) return "六等奖";
-    if (redHits === 3 && !blueHit) return "福运奖";
+    if (redHits === 3 && !blueHit && hasFortunePrize(draw)) return "福运奖";
     return "未中奖";
   }
 

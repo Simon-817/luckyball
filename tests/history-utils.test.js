@@ -9,6 +9,7 @@ const {
   mergePrizeData,
   normalizePrizeRows,
   parseHtmlDraws,
+  evaluateLine,
 } = require("../history-utils.js");
 
 const NOW = Date.parse("2026-06-17T12:00:00+08:00");
@@ -116,6 +117,24 @@ test("floating prize without synced amount is reported as unresolved", () => {
     totalAmount: 0,
     unresolvedAmountCount: 1,
   });
+});
+
+test("fortune prize is only available when pool money is at least 300 million", () => {
+  const line = { reds: [12, 14, 18, 25, 29, 32], blue: 13 };
+  const draw = { issue: "2026078", reds: [1, 4, 14, 18, 25, 28], blue: 4 };
+
+  assert.equal(evaluateLine(line, { ...draw, poolMoney: 299999999 }), "未中奖");
+  assert.equal(evaluateLine(line, { ...draw, poolMoney: 300000000 }), "福运奖");
+});
+
+test("2026077 third generated line is manually treated as not winning", () => {
+  assert.equal(
+    evaluateLine(
+      { reds: [12, 14, 18, 25, 29, 32], blue: 13 },
+      { issue: "2026077", reds: [1, 4, 5, 14, 18, 25], blue: 4, poolMoney: 320076738 },
+    ),
+    "未中奖",
+  );
 });
 
 test("official prize rows are normalized to prize names and numeric amounts", () => {

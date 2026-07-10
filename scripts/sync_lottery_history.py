@@ -55,6 +55,11 @@ def normalize_reds(value):
     return [pad(num) for num in nums if 1 <= num <= 33][:6]
 
 
+def number(value):
+    digits = re.sub(r"\D", "", str(value or ""))
+    return int(digits) if digits else 0
+
+
 def normalize_prizegrades(rows):
     return rows if isinstance(rows, list) else []
 
@@ -77,6 +82,7 @@ def normalize_official_rows(payload):
             "date": normalize_date(row.get("date") or row.get("openTime")),
             "red_balls": normalize_reds(row.get("red") or row.get("frontWinningNum")),
             "blue_ball": pad(row.get("blue") or row.get("backWinningNum") or 0),
+            "poolMoney": number(row.get("poolmoney") or row.get("poolMoney")),
             "prizegrades": normalize_prizegrades(row.get("prizegrades")),
         }
         if valid_row(item):
@@ -132,7 +138,8 @@ def merge_rows(*row_sets):
     for rows in row_sets:
         for row in rows:
             if valid_row(row):
-                by_issue[str(row["issue"])] = row
+                issue = str(row["issue"])
+                by_issue[issue] = {**by_issue.get(issue, {}), **row}
     return sorted(by_issue.values(), key=lambda row: int(row["issue"]), reverse=True)
 
 

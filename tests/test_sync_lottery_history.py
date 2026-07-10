@@ -11,6 +11,7 @@ class SyncLotteryHistoryTest(unittest.TestCase):
                 "date": "2026-07-07(二)",
                 "red": "01,04,05,14,18,25",
                 "blue": "04",
+                "poolmoney": "320076738",
                 "prizegrades": [{"type": 1, "typenum": "6", "typemoney": "8516882"}],
             }]
         }
@@ -20,6 +21,7 @@ class SyncLotteryHistoryTest(unittest.TestCase):
             "date": "2026-07-07",
             "red_balls": ["01", "04", "05", "14", "18", "25"],
             "blue_ball": "04",
+            "poolMoney": 320076738,
             "prizegrades": [{"type": 1, "typenum": "6", "typemoney": "8516882"}],
         }])
 
