@@ -87,7 +87,9 @@ test("AI pick flow follows the requested three-line strategy structure", () => {
     assert.equal(new Set(blueValues).size, 3);
     assert.ok(lines[0].blue >= 1 && lines[0].blue <= 5);
     assert.ok(lines[1].blue >= 6 && lines[1].blue <= 11);
-    assert.ok(lines[2].blue >= 12 && lines[2].blue <= 16);
+    assert.equal(lines[2].blue, 1);
+    assert.deepEqual(Array.from(lines[2].reds), [1, 14, 17, 18, 22, 26]);
+    assert.equal(lines[2].type, "fixed");
 
     assert.equal(countBetween(lines[0].reds, 1, 11), 2);
     assert.equal(countBetween(lines[0].reds, 12, 22), 2);
@@ -98,8 +100,6 @@ test("AI pick flow follows the requested three-line strategy structure", () => {
     assert.ok(redOverlapCount(lines[1].reds, lines[2].reds) <= 2);
 
     assert.ok(lines[1].reds.every((num) => !lines[0].reds.includes(num)));
-    assert.ok(lines[2].reds.some((num) => num >= 30));
     assert.ok(lines.some((line) => line.reds.includes(32) || line.reds.includes(33)));
-    assert.ok(lines.every((line) => line.reds.some((num) => num > 31)));
   }
 });

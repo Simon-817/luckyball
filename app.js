@@ -49,11 +49,7 @@ const STRATEGY_LINE_PROFILES = [
   },
   {
     id: "coverage",
-    blueRange: [12, 16],
-    preferUnusedReds: true,
-    parityOddCounts: [2, 3],
-    requireAtLeastThirty: true,
-    requireAntiBirthday: true,
+    fixedLine: { reds: [1, 14, 17, 18, 22, 26], blue: 1 },
   },
 ];
 
@@ -1049,6 +1045,24 @@ function buildCoverageStructuredReds(settings, profile, selectedLines) {
   return [...picked].sort((a, b) => a - b);
 }
 
+function buildFixedStrategyLine(profile) {
+  return {
+    reds: [...profile.fixedLine.reds].sort((a, b) => a - b),
+    blue: profile.fixedLine.blue,
+    type: "fixed",
+    entropyScore: 0,
+    strategyScore: 0,
+    meta: { profile: profile.id },
+  };
+}
+
+function futureFixedStrategyLines(currentIndex) {
+  return STRATEGY_LINE_PROFILES
+    .slice(currentIndex + 1)
+    .filter((profile) => profile.fixedLine)
+    .map(buildFixedStrategyLine);
+}
+
 function isStructuredRedsValid(reds, profile, selectedLines) {
   if (!reds || new Set(reds).size !== 6) return false;
   if (maxRunLength(reds) >= 3) return false;
@@ -1083,7 +1097,7 @@ function buildStructuredCandidate(settings, profile, selectedLines) {
   const relaxedAnalysis = analyzeReds(reds, settings, new Set(), ZONES, true);
   return {
     reds,
-    blue: randomBlue(profile.blueRange),
+    blue: randomBlue(profile.blueRange, new Set(selectedLines.map((line) => line.blue))),
     type: "ai",
     entropyScore: relaxedAnalysis.entropyScore,
     strategyScore: scoreCandidate(reds, relaxedAnalysis, ZONES),
@@ -1166,8 +1180,26 @@ function chooseDiverseCandidate(candidates, selectedLines, targetShadowCount = n
 function chooseGroupLine(settings, selectedLines, targetShadowCount = chooseTargetShadowCount()) {
   const profile = STRATEGY_LINE_PROFILES[selectedLines.length];
   if (profile) {
-    const structuredLine = buildStructuredLine(settings, profile, selectedLines);
+    if (profile.fixedLine) return buildFixedStrategyLine(profile);
+
+    const strategyContextLines = [...selectedLines, ...futureFixedStrategyLines(selectedLines.length)];
+    const structuredLine = buildStructuredLine(settings, profile, strategyContextLines);
     if (structuredLine) return structuredLine;
+
+    const allCandidates = [];
+    const targetAttempts = [targetShadowCount, null, chooseTargetShadowCount(), null, chooseTargetShadowCount()];
+
+    for (const target of targetAttempts) {
+      const candidates = collectCandidateLines(settings, target);
+      allCandidates.push(...candidates);
+      const diverseCandidates = candidates.filter((candidate) => isDiverseCandidate(candidate, strategyContextLines));
+      if (diverseCandidates.length) return chooseDiverseCandidate(diverseCandidates, strategyContextLines, target);
+    }
+
+    const diverseCandidates = allCandidates.filter((candidate) => isDiverseCandidate(candidate, strategyContextLines));
+    if (diverseCandidates.length) return chooseDiverseCandidate(diverseCandidates, strategyContextLines);
+    if (allCandidates.length) return chooseDiverseCandidate(allCandidates, strategyContextLines);
+    return buildFallbackLine(settings);
   }
 
   const allCandidates = [];
@@ -1206,8 +1238,10 @@ function generateAiLines(count = CURRENT_PICK_COUNT) {
   return lines;
 }
 
-function randomBlue(bounds = [BLUE_MIN, BLUE_MAX]) {
-  return randomInt(bounds[0], bounds[1]);
+function randomBlue(bounds = [BLUE_MIN, BLUE_MAX], excluded = new Set()) {
+  const pool = range(bounds[0], bounds[1]).filter((num) => !excluded.has(num));
+  const candidates = pool.length ? pool : range(bounds[0], bounds[1]);
+  return candidates[randomInt(0, candidates.length - 1)];
 }
 
 function makeBall(num, color, placeholder = false) {
