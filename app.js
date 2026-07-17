@@ -306,6 +306,10 @@ function addChinaDays(parts, offset) {
   return chinaParts(timestamp);
 }
 
+function formatChinaDate(parts) {
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+}
+
 function isDrawWeekday(week) {
   return week === 2 || week === 4 || week === 0;
 }
@@ -327,7 +331,11 @@ function getNextDraw(timestamp = Date.now()) {
 
 function countDrawSlotsAfterLatest(targetTimestamp) {
   if (!state.latestDraw?.date) return 1;
-  const latestDate = parseChinaDate(state.latestDraw.date);
+  return countDrawSlotsAfterDate(state.latestDraw.date, targetTimestamp);
+}
+
+function countDrawSlotsAfterDate(dateText, targetTimestamp) {
+  const latestDate = parseChinaDate(dateText);
   const latestTimestamp = chinaTimestamp(latestDate.year, latestDate.month, latestDate.day, 21, 15, 0);
   let count = 0;
 
@@ -340,6 +348,25 @@ function countDrawSlotsAfterLatest(targetTimestamp) {
   }
 
   return Math.max(1, count);
+}
+
+function drawTimestamp(draw) {
+  if (!draw?.date) return 0;
+  const parts = parseChinaDate(draw.date);
+  return chinaTimestamp(parts.year, parts.month, parts.day, 21, 15, 0);
+}
+
+function issueForDrawAt(drawAt) {
+  const drawDate = formatChinaDate(chinaParts(drawAt));
+  const knownDraw = state.draws.find((draw) => draw.date === drawDate);
+  if (knownDraw?.issue) return knownDraw.issue;
+
+  const anchor = state.draws
+    .filter((draw) => draw.issue && draw.date && drawTimestamp(draw) < drawAt)
+    .sort((left, right) => drawTimestamp(right) - drawTimestamp(left))[0];
+  if (!anchor?.issue || !anchor.date) return "";
+
+  return String(Number(anchor.issue) + countDrawSlotsAfterDate(anchor.date, drawAt));
 }
 
 function countElapsedDrawSlotsAfterLatest(targetTimestamp = Date.now()) {
@@ -367,9 +394,7 @@ function getExpectedLatestIssue(timestamp = Date.now()) {
 function getBetIssue(timestamp = Date.now()) {
   if (!state.latestDraw?.issue || !state.latestDraw?.date) return "";
   const nextDraw = getNextDraw(timestamp);
-  const latestIssue = Number(state.latestDraw.issue);
-  const increment = nextDraw ? countDrawSlotsAfterLatest(nextDraw.timestamp) : 1;
-  return String(latestIssue + increment);
+  return nextDraw ? issueForDrawAt(nextDraw.timestamp) : "";
 }
 
 function formatDateLabel(timestamp = Date.now()) {
@@ -1476,6 +1501,28 @@ function saveHistory() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.history));
 }
 
+function repairHistoryIssueMismatches() {
+  if (!state.draws.length) return false;
+  let changed = false;
+
+  state.history = state.history.map((record) => {
+    const timestamp = HistoryUtils.recordTimestamp(record);
+    if (!timestamp) return record;
+    const expectedIssue = getBetIssue(timestamp);
+    if (!expectedIssue || String(record.issue) === expectedIssue) return record;
+
+    changed = true;
+    return { ...record, issue: expectedIssue };
+  });
+
+  if (changed) {
+    state.history.sort((left, right) => HistoryUtils.recordTimestamp(right) - HistoryUtils.recordTimestamp(left));
+    saveHistory();
+  }
+
+  return changed;
+}
+
 function handleAiPick() {
   const lines = generateAiLines();
   state.generatedLine = lines[0];
@@ -1578,6 +1625,7 @@ async function loadData() {
 
   state.latestDraw = state.draws[0];
   state.heatProfile = computeHeatProfile(state.draws);
+  repairHistoryIssueMismatches();
   renderAll();
 }
 

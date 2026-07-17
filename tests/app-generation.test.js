@@ -32,7 +32,7 @@ function loadGeneratorApi() {
       matchedNumbers() { return { reds: [], blue: false }; },
       normalizePrizeRows() { return []; },
       paginateHistory(records) { return records; },
-      recordTimestamp() { return 0; },
+      recordTimestamp(record) { return Date.parse(record?.betAt || "") || 0; },
     },
     localStorage: {
       getItem() { return null; },
@@ -40,7 +40,7 @@ function loadGeneratorApi() {
     },
   };
   const source = `${APP_JS.replace(/\nbindEvents\(\);[\s\S]*$/, "")}
-globalThis.__testApi = { generateAiLines, redOverlapCount, getBetIssue, handleBet, state };`;
+globalThis.__testApi = { generateAiLines, redOverlapCount, getBetIssue, handleBet, repairHistoryIssueMismatches, state };`;
 
   vm.runInNewContext(source, context);
   return context.__testApi;
@@ -122,8 +122,37 @@ test("bet issue uses the synced latest draw for the next draw", () => {
   const { getBetIssue, state } = loadGeneratorApi();
 
   state.latestDraw = { issue: "2026081", date: "2026-07-16" };
+  state.draws = [{ issue: "2026081", date: "2026-07-16", reds: [1, 2, 3, 4, 5, 6], blue: 7 }];
 
   assert.equal(getBetIssue(Date.parse("2026-07-17T12:00:00+08:00")), "2026082");
+});
+
+test("saved fallback issue is repaired after draw data loads", () => {
+  const { repairHistoryIssueMismatches, state } = loadGeneratorApi();
+
+  state.latestDraw = { issue: "2026081", date: "2026-07-16" };
+  state.draws = [
+    { issue: "2026081", date: "2026-07-16", reds: [1, 2, 3, 4, 5, 6], blue: 7 },
+    { issue: "2026061", date: "2026-05-31", reds: [1, 2, 3, 4, 5, 6], blue: 7 },
+  ];
+  state.history = [
+    {
+      id: "bad",
+      issue: "2026061",
+      betAt: "2026-07-17T12:00:00+08:00",
+      lines: [{ reds: [1, 14, 17, 18, 22, 26], blue: 1 }],
+    },
+    {
+      id: "legit",
+      issue: "2026061",
+      betAt: "2026-05-31T12:00:00+08:00",
+      lines: [{ reds: [1, 2, 3, 4, 5, 6], blue: 7 }],
+    },
+  ];
+
+  assert.equal(repairHistoryIssueMismatches(), true);
+  assert.equal(state.history.find((record) => record.id === "bad").issue, "2026082");
+  assert.equal(state.history.find((record) => record.id === "legit").issue, "2026061");
 });
 
 test("bet history is not saved before latest draw data is loaded", () => {
