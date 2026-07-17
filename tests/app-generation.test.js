@@ -26,7 +26,13 @@ function loadGeneratorApi() {
       querySelectorAll() { return []; },
     },
     HistoryUtils: {
+      calculateWinningStats() { return { winCount: 0, totalAmount: 0, unresolvedAmountCount: 0 }; },
+      evaluateLine() { return "未开奖"; },
+      filterHistory(records) { return records; },
+      matchedNumbers() { return { reds: [], blue: false }; },
       normalizePrizeRows() { return []; },
+      paginateHistory(records) { return records; },
+      recordTimestamp() { return 0; },
     },
     localStorage: {
       getItem() { return null; },
@@ -34,7 +40,7 @@ function loadGeneratorApi() {
     },
   };
   const source = `${APP_JS.replace(/\nbindEvents\(\);[\s\S]*$/, "")}
-globalThis.__testApi = { generateAiLines, redOverlapCount };`;
+globalThis.__testApi = { generateAiLines, redOverlapCount, getBetIssue, handleBet, state };`;
 
   vm.runInNewContext(source, context);
   return context.__testApi;
@@ -102,4 +108,32 @@ test("AI pick flow follows the requested three-line strategy structure", () => {
     assert.ok(lines[1].reds.every((num) => !lines[0].reds.includes(num)));
     assert.ok(lines.some((line) => line.reds.includes(32) || line.reds.includes(33)));
   }
+});
+
+test("bet issue is not calculated before latest draw data is loaded", () => {
+  const { getBetIssue, state } = loadGeneratorApi();
+
+  state.latestDraw = null;
+
+  assert.equal(getBetIssue(Date.parse("2026-07-17T12:00:00+08:00")), "");
+});
+
+test("bet issue uses the synced latest draw for the next draw", () => {
+  const { getBetIssue, state } = loadGeneratorApi();
+
+  state.latestDraw = { issue: "2026081", date: "2026-07-16" };
+
+  assert.equal(getBetIssue(Date.parse("2026-07-17T12:00:00+08:00")), "2026082");
+});
+
+test("bet history is not saved before latest draw data is loaded", () => {
+  const { handleBet, state } = loadGeneratorApi();
+
+  state.latestDraw = null;
+  state.loadingDraw = true;
+  state.currentLines = [{ reds: [1, 14, 17, 18, 22, 26], blue: 1, type: "fixed" }];
+
+  handleBet();
+
+  assert.equal(state.history.length, 0);
 });

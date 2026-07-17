@@ -6,7 +6,7 @@ const path = require("node:path");
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
 test("draw refresh scripts use the current cache-busting version", () => {
-  assert.match(INDEX_HTML, /history-utils\.js\?v=20260717-fixed-third-line-v6/);
-  assert.match(INDEX_HTML, /restored-history\.js\?v=20260717-fixed-third-line-v6/);
-  assert.match(INDEX_HTML, /app\.js\?v=20260717-fixed-third-line-v6/);
+  assert.match(INDEX_HTML, /history-utils\.js\?v=20260717-bet-issue-guard-v7/);
+  assert.match(INDEX_HTML, /restored-history\.js\?v=20260717-bet-issue-guard-v7/);
+  assert.match(INDEX_HTML, /app\.js\?v=20260717-bet-issue-guard-v7/);
 });

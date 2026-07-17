@@ -365,8 +365,9 @@ function getExpectedLatestIssue(timestamp = Date.now()) {
 }
 
 function getBetIssue(timestamp = Date.now()) {
+  if (!state.latestDraw?.issue || !state.latestDraw?.date) return "";
   const nextDraw = getNextDraw(timestamp);
-  const latestIssue = Number(state.latestDraw?.issue || normalizeDraw(FALLBACK_DRAWS[0]).issue);
+  const latestIssue = Number(state.latestDraw.issue);
   const increment = nextDraw ? countDrawSlotsAfterLatest(nextDraw.timestamp) : 1;
   return String(latestIssue + increment);
 }
@@ -1305,7 +1306,7 @@ function renderCurrentBet() {
   }
 
   state.currentLines.forEach((line, index) => els.currentBetList.append(makeCurrentLine(line, index)));
-  els.betBtn.disabled = false;
+  els.betBtn.disabled = state.loadingDraw || !state.latestDraw;
 }
 
 function renderLatestDraw() {
@@ -1484,11 +1485,13 @@ function handleAiPick() {
 }
 
 function handleBet() {
-  if (!state.currentLines.length) return;
+  if (!state.currentLines.length || state.loadingDraw || !state.latestDraw) return;
   const now = Date.now();
+  const issue = getBetIssue(now);
+  if (!issue) return;
   const record = {
     id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
-    issue: getBetIssue(now),
+    issue,
     betAt: new Date(now).toISOString(),
     lines: state.currentLines.map((line) => ({
       reds: [...line.reds],
