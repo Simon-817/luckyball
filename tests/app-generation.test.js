@@ -3,10 +3,11 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const { createHash } = require("node:crypto");
 
 const APP_JS = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 
-function loadGeneratorApi() {
+function loadGeneratorApi(overrides = {}) {
   const noopElement = {
     addEventListener() {},
     append() {},
@@ -40,74 +41,107 @@ function loadGeneratorApi() {
     },
   };
   const source = `${APP_JS.replace(/\nbindEvents\(\);[\s\S]*$/, "")}
-globalThis.__testApi = { generateAiLines, redOverlapCount, getBetIssue, handleBet, repairHistoryIssueMismatches, state };`;
+globalThis.__testApi = { generateAiLines, handleAiPick, randomInt, getBetIssue, handleBet, repairHistoryIssueMismatches, state };`;
 
+  Object.assign(context, overrides);
   vm.runInNewContext(source, context);
   return context.__testApi;
 }
 
-function countBetween(nums, min, max) {
-  return nums.filter((num) => num >= min && num <= max).length;
+function seededCrypto(seed = 12345) {
+  return {
+    getRandomValues(values) {
+      values[0] = createHash("sha256").update(String(seed++)).digest().readUInt32LE(0);
+      return values;
+    },
+  };
 }
 
-test("AI pick flow generates three strategy lines without fixed picks", () => {
-  assert.match(APP_JS, /const CURRENT_PICK_COUNT = 3;/);
-  assert.match(APP_JS, /function generateAiLines\(count = CURRENT_PICK_COUNT\)/);
-  assert.match(APP_JS, /const lines = generateAiLines\(\);/);
-  assert.match(APP_JS, /state\.generatedLine = lines\[0\];/);
-  assert.match(APP_JS, /state\.currentLines = lines;/);
-  assert.doesNotMatch(APP_JS, /const FIXED_LINES/);
-  assert.doesNotMatch(APP_JS, /FIXED_LINES\.map/);
-});
+function assertStrategy(lines) {
+  assert.equal(lines.length, 3);
+  assert.equal(new Set(lines.flatMap((line) => Array.from(line.reds))).size, 18);
+  assert.equal(new Set(lines.map((line) => line.blue)).size, 3);
+  for (const line of lines) {
+    assert.equal(line.reds.length, 6);
+    assert.ok(line.reds.every((num) => Number.isInteger(num) && num >= 1 && num <= 33));
+    assert.deepEqual(Array.from(line.reds), Array.from(line.reds).sort((a, b) => a - b));
+    assert.ok(Number.isInteger(line.blue) && line.blue >= 1 && line.blue <= 16);
+  }
+  assert.ok(lines.slice(0, 2).every((line) => line.type === "ai" && line.blue >= 2));
+  assert.deepEqual(Array.from(lines[2].reds), [1, 14, 17, 18, 22, 26]);
+  assert.equal(lines[2].blue, 1);
+  assert.equal(lines[2].type, "fixed");
+}
 
 test("draw history loads the same-origin synced data before external sources", () => {
   assert.match(APP_JS, /const LOCAL_DATA_URL = "\.\/data\/lottery_history\.json";/);
   assert.match(APP_JS, /const DATA_SOURCES = \[LOCAL_DATA_URL, DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFFICIAL_DATA_URL\];/);
 });
 
-test("AI pick flow diversifies the three generated lines as a group", () => {
-  assert.match(APP_JS, /const MAX_SHARED_REDS_PER_LINE = 2;/);
-  assert.match(APP_JS, /const MAX_RED_APPEARANCES_PER_PICK = 2;/);
-  assert.match(APP_JS, /const STRATEGY_LINE_PROFILES = /);
-  assert.match(APP_JS, /function buildStructuredLine\(settings, profile, selectedLines\)/);
-  assert.match(APP_JS, /function redOverlapCount\(left, right\)/);
-  assert.match(APP_JS, /function redAppearanceMap\(lines\)/);
-  assert.match(APP_JS, /function isDiverseCandidate\(candidate, selectedLines\)/);
-  assert.match(APP_JS, /function lineDiversityPenalty\(candidate, selectedLines\)/);
-  assert.match(APP_JS, /function chooseDiverseCandidate\(candidates, selectedLines, targetShadowCount = null\)/);
-  assert.match(APP_JS, /function chooseGroupLine\(settings, selectedLines, targetShadowCount = chooseTargetShadowCount\(\)\)/);
-  assert.match(APP_JS, /redOverlapCount\(candidate\.reds, line\.reds\) <= MAX_SHARED_REDS_PER_LINE/);
-  assert.match(APP_JS, /count <= MAX_RED_APPEARANCES_PER_PICK/);
-  assert.match(APP_JS, /candidates\.filter\(\(candidate\) => isDiverseCandidate\(candidate, selectedLines\)\)/);
-  assert.match(APP_JS, /chooseGroupLine\(settings, lines\)/);
+test("pick button generates disjoint reds and distinct blues across 1000 batches", () => {
+  const { handleAiPick, state } = loadGeneratorApi({ crypto: seededCrypto() });
+  const seenReds = [new Set(), new Set()];
+  const seenBlues = [new Set(), new Set()];
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    handleAiPick();
+    assertStrategy(state.currentLines);
+    assert.equal(state.generatedLine, state.currentLines[0]);
+    state.currentLines.slice(0, 2).forEach((line, index) => {
+      line.reds.forEach((num) => seenReds[index].add(num));
+      seenBlues[index].add(line.blue);
+    });
+  }
+  assert.deepEqual(seenReds.map((set) => set.size), [27, 27]);
+  assert.deepEqual(seenBlues.map((set) => set.size), [15, 15]);
 });
 
-test("AI pick flow follows the requested three-line strategy structure", () => {
-  const { generateAiLines, redOverlapCount } = loadGeneratorApi();
-
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const lines = generateAiLines();
-    assert.equal(lines.length, 3);
-
-    const blueValues = lines.map((line) => line.blue);
-    assert.equal(new Set(blueValues).size, 3);
-    assert.ok(lines[0].blue >= 1 && lines[0].blue <= 5);
-    assert.ok(lines[1].blue >= 6 && lines[1].blue <= 11);
-    assert.equal(lines[2].blue, 1);
-    assert.deepEqual(Array.from(lines[2].reds), [1, 14, 17, 18, 22, 26]);
-    assert.equal(lines[2].type, "fixed");
-
-    assert.equal(countBetween(lines[0].reds, 1, 11), 2);
-    assert.equal(countBetween(lines[0].reds, 12, 22), 2);
-    assert.equal(countBetween(lines[0].reds, 23, 33), 2);
-
-    assert.equal(redOverlapCount(lines[0].reds, lines[1].reds), 0);
-    assert.ok(redOverlapCount(lines[0].reds, lines[2].reds) <= 2);
-    assert.ok(redOverlapCount(lines[1].reds, lines[2].reds) <= 2);
-
-    assert.ok(lines[1].reds.every((num) => !lines[0].reds.includes(num)));
-    assert.ok(lines.some((line) => line.reds.includes(32) || line.reds.includes(33)));
+test("generation does not depend on past draws or alter saved history", () => {
+  const left = loadGeneratorApi({ crypto: seededCrypto() });
+  const right = loadGeneratorApi({ crypto: seededCrypto() });
+  const history = [{ issue: "2026082", lines: [{ reds: [2, 4, 6, 8, 10, 12], blue: 2 }] }];
+  right.state.draws = [{ issue: "2026100", reds: [2, 3, 4, 5, 6, 7], blue: 16 }];
+  right.state.latestDraw = right.state.draws[0];
+  right.state.history = structuredClone(history);
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    assert.equal(JSON.stringify(left.generateAiLines()), JSON.stringify(right.generateAiLines()));
   }
+  assert.deepEqual(right.state.history, history);
+});
+
+test("valid consecutive reds and birthday-only lines are not filtered out", () => {
+  const values = [
+    ...Array.from({ length: 26 }, (_, index) => 26 - index),
+    ...Array.from({ length: 14 }, (_, index) => 14 - index),
+  ];
+  const { generateAiLines } = loadGeneratorApi({
+    crypto: { getRandomValues(array) {
+      assert.ok(values.length > 0, "generation should not retry based on number patterns");
+      array[0] = values.shift();
+      return array;
+    } },
+  });
+  const lines = generateAiLines();
+  assertStrategy(lines);
+  assert.deepEqual(Array.from(lines[0].reds), [2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(Array.from(lines[1].reds), [8, 9, 10, 11, 12, 13]);
+});
+
+test("integer sampling rejects the partial crypto bucket", () => {
+  const values = [4294967295, 26, 0];
+  const { randomInt } = loadGeneratorApi({
+    crypto: { getRandomValues(array) { array[0] = values.shift(); return array; } },
+  });
+  assert.equal(randomInt(0, 26), 26);
+  assert.equal(randomInt(2, 16), 2);
+  assert.equal(values.length, 0);
+});
+
+test("generation supports browsers without crypto and returns fresh fixed reds", () => {
+  const { generateAiLines } = loadGeneratorApi();
+  const first = generateAiLines();
+  assertStrategy(first);
+  first[2].reds[0] = 33;
+  assertStrategy(generateAiLines());
 });
 
 test("bet issue is not calculated before latest draw data is loaded", () => {
