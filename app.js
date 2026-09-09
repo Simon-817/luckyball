@@ -25,6 +25,39 @@ const DATA_SOURCES = [LOCAL_DATA_URL, DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFF
 const PRIZE_DATA_URL = "./data/lottery_prizes.json";
 const CURRENT_PICK_COUNT = 3;
 const FIXED_THIRD_LINE = { reds: [1, 14, 17, 18, 22, 26], blue: 1 };
+const CONSECUTIVE_PATTERN_WEIGHTS = [
+  { id: "none", weight: 3485, runLength: 1, runCount: 0 },
+  { id: "onePair", weight: 4427, runLength: 2, runCount: 1 },
+  { id: "twoPairs", weight: 1048, runLength: 2, runCount: 2 },
+  { id: "threePairs", weight: 23, runLength: 2, runCount: 3 },
+  { id: "oneTriple", weight: 911, runLength: 3, runCount: 1 },
+  { id: "oneQuad", weight: 100, runLength: 4, runCount: 1 },
+  { id: "oneQuint", weight: 6, runLength: 5, runCount: 1 },
+];
+const RUN_ZONE_WEIGHTS = {
+  2: [
+    { id: "low", weight: 738 },
+    { id: "mid", weight: 700 },
+    { id: "high", weight: 731 },
+    { id: "cross", weight: 139 },
+  ],
+  3: [
+    { id: "low", weight: 84 },
+    { id: "mid", weight: 106 },
+    { id: "high", weight: 82 },
+    { id: "cross", weight: 47 },
+  ],
+  4: [
+    { id: "low", weight: 9 },
+    { id: "mid", weight: 8 },
+    { id: "high", weight: 9 },
+    { id: "cross", weight: 9 },
+  ],
+  5: [
+    { id: "low", weight: 1 },
+    { id: "cross", weight: 1 },
+  ],
+};
 
 const FALLBACK_DRAWS = [
   { period: "26060", red_balls: ["07", "09", "10", "16", "22", "27"], blue_ball: "11", date: "2026-05-28" },
@@ -370,17 +403,188 @@ function shuffled(items) {
   return result;
 }
 
-function generateAiLines() {
-  const fixedReds = new Set(FIXED_THIRD_LINE.reds);
-  const reds = shuffled(range(RED_MIN, RED_MAX).filter((num) => !fixedReds.has(num)));
-  const blues = shuffled(range(BLUE_MIN, BLUE_MAX).filter((num) => num !== FIXED_THIRD_LINE.blue));
+function weightedChoice(options) {
+  const totalWeight = options.reduce((sum, option) => sum + option.weight, 0);
+  let roll = randomInt(1, totalWeight);
+  for (const option of options) {
+    roll -= option.weight;
+    if (roll <= 0) return option;
+  }
+  return options[options.length - 1];
+}
 
-  // One shuffled pool gives both random lines disjoint, uniformly sampled reds.
-  const lines = Array.from({ length: CURRENT_PICK_COUNT - 1 }, (_, index) => ({
-    reds: reds.slice(index * 6, (index + 1) * 6).sort((a, b) => a - b),
-    blue: blues[index],
-    type: "ai",
-  }));
+function sampleConsecutivePattern() {
+  return weightedChoice(CONSECUTIVE_PATTERN_WEIGHTS);
+}
+
+function sampleRunZone(runLength) {
+  return weightedChoice(RUN_ZONE_WEIGHTS[runLength]).id;
+}
+
+function consecutiveRuns(reds) {
+  const sorted = [...reds].sort((left, right) => left - right);
+  const runs = [];
+  let current = [sorted[0]];
+  for (let index = 1; index < sorted.length; index += 1) {
+    if (sorted[index] === sorted[index - 1] + 1) {
+      current.push(sorted[index]);
+      continue;
+    }
+    if (current.length >= 2) runs.push(current);
+    current = [sorted[index]];
+  }
+  if (current.length >= 2) runs.push(current);
+  return runs;
+}
+
+function runZone(run) {
+  if (run.every((num) => num <= 11)) return "low";
+  if (run.every((num) => num >= 12 && num <= 22)) return "mid";
+  if (run.every((num) => num >= 23)) return "high";
+  return "cross";
+}
+
+function classifyConsecutiveReds(reds) {
+  const runs = consecutiveRuns(reds);
+  if (!runs.length) return { patternId: "none", runs, maxRunLength: 1 };
+
+  const maxRunLength = Math.max(...runs.map((run) => run.length));
+  const maxRuns = runs.filter((run) => run.length === maxRunLength);
+  let patternId = "unsupported";
+  if (maxRunLength === 2 && maxRuns.length >= 1 && maxRuns.length <= 3) {
+    patternId = ["", "onePair", "twoPairs", "threePairs"][maxRuns.length];
+  } else if (maxRunLength === 3 && maxRuns.length === 1) {
+    patternId = "oneTriple";
+  } else if (maxRunLength === 4 && maxRuns.length === 1) {
+    patternId = "oneQuad";
+  } else if (maxRunLength === 5 && maxRuns.length === 1) {
+    patternId = "oneQuint";
+  }
+  return { patternId, runs, maxRunLength };
+}
+
+function sameZoneMultiset(actual, expected) {
+  return [...actual].sort().join(",") === [...expected].sort().join(",");
+}
+
+function matchesConsecutiveTarget(reds, target) {
+  const classification = classifyConsecutiveReds(reds);
+  if (classification.patternId !== target.patternId) return false;
+  if (target.patternId === "none") return true;
+  const targetZones = classification.runs
+    .filter((run) => run.length === target.runLength)
+    .map(runZone);
+  return sameZoneMultiset(targetZones, target.zones);
+}
+
+function possibleRunStarts(runLength, zone, allowed) {
+  const starts = [];
+  for (let start = RED_MIN; start <= RED_MAX - runLength + 1; start += 1) {
+    const run = range(start, start + runLength - 1);
+    if (runZone(run) === zone && run.every((num) => allowed.has(num))) starts.push(start);
+  }
+  return starts;
+}
+
+function tryGenerateReds(target, allowedNumbers, blockedNumbers, maxOverlap, maxAttempts = 500) {
+  if (allowedNumbers.length < 6) return null;
+  const allowed = new Set(allowedNumbers);
+  const blocked = new Set(blockedNumbers);
+  const startPools = new Map();
+  for (const zone of new Set(target.zones)) {
+    const starts = possibleRunStarts(target.runLength, zone, allowed);
+    if (!starts.length) return null;
+    startPools.set(zone, starts);
+  }
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const selected = new Set();
+    let validRuns = true;
+    for (const zone of shuffled(target.zones)) {
+      const starts = startPools.get(zone).filter((start) =>
+        range(start, start + target.runLength - 1).every((num) => !selected.has(num))
+      );
+      if (!starts.length) {
+        validRuns = false;
+        break;
+      }
+      const start = starts[randomInt(0, starts.length - 1)];
+      range(start, start + target.runLength - 1).forEach((num) => selected.add(num));
+    }
+    if (!validRuns || selected.size > 6) continue;
+
+    const remaining = shuffled(allowedNumbers.filter((num) => !selected.has(num)));
+    const needed = 6 - selected.size;
+    if (remaining.length < needed) continue;
+    const reds = [...selected, ...remaining.slice(0, needed)].sort((left, right) => left - right);
+    const overlap = reds.filter((num) => blocked.has(num)).length;
+    if (overlap <= maxOverlap && matchesConsecutiveTarget(reds, target)) return reds;
+  }
+  return null;
+}
+
+function findMatchingCombination(target, allowedNumbers) {
+  const candidates = shuffled(allowedNumbers);
+  const length = candidates.length;
+  if (length < 6) return null;
+  for (let a = 0; a < length - 5; a += 1) {
+    for (let b = a + 1; b < length - 4; b += 1) {
+      for (let c = b + 1; c < length - 3; c += 1) {
+        for (let d = c + 1; d < length - 2; d += 1) {
+          for (let e = d + 1; e < length - 1; e += 1) {
+            for (let f = e + 1; f < length; f += 1) {
+              const reds = [candidates[a], candidates[b], candidates[c], candidates[d], candidates[e], candidates[f]]
+                .sort((left, right) => left - right);
+              if (matchesConsecutiveTarget(reds, target)) return reds;
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function generateRedsForTarget(target, blockedNumbers = []) {
+  const allReds = range(RED_MIN, RED_MAX);
+  const blocked = new Set(blockedNumbers);
+  const withoutOverlap = allReds.filter((num) => !blocked.has(num));
+  const disjoint = tryGenerateReds(target, withoutOverlap, blockedNumbers, 0);
+  if (disjoint) return disjoint;
+  const exhaustiveDisjoint = findMatchingCombination(target, withoutOverlap);
+  if (exhaustiveDisjoint) return exhaustiveDisjoint;
+
+  for (let maxOverlap = 1; maxOverlap <= 6; maxOverlap += 1) {
+    const reds = tryGenerateReds(target, allReds, blockedNumbers, maxOverlap);
+    if (reds) return reds;
+  }
+  return null;
+}
+
+function generateRedsForPattern(pattern, blockedNumbers) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const target = {
+      patternId: pattern.id,
+      runLength: pattern.runLength,
+      runCount: pattern.runCount,
+      zones: Array.from({ length: pattern.runCount }, () => sampleRunZone(pattern.runLength)),
+    };
+    const reds = generateRedsForTarget(target, blockedNumbers);
+    if (reds) return reds;
+  }
+  throw new Error(`Unable to generate red balls for ${pattern.id}`);
+}
+
+function generateAiLines() {
+  const blues = shuffled(range(BLUE_MIN, BLUE_MAX).filter((num) => num !== FIXED_THIRD_LINE.blue));
+  const patterns = Array.from({ length: CURRENT_PICK_COUNT - 1 }, sampleConsecutivePattern);
+  const lines = [];
+  let blockedReds = [...FIXED_THIRD_LINE.reds];
+  patterns.forEach((pattern, index) => {
+    const reds = generateRedsForPattern(pattern, blockedReds);
+    lines.push({ reds, blue: blues[index], type: "ai" });
+    blockedReds = [...new Set([...blockedReds, ...reds])];
+  });
   lines.push({
     reds: [...FIXED_THIRD_LINE.reds],
     blue: FIXED_THIRD_LINE.blue,

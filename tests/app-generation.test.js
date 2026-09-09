@@ -41,7 +41,20 @@ function loadGeneratorApi(overrides = {}) {
     },
   };
   const source = `${APP_JS.replace(/\nbindEvents\(\);[\s\S]*$/, "")}
-globalThis.__testApi = { generateAiLines, handleAiPick, randomInt, getBetIssue, handleBet, repairHistoryIssueMismatches, state };`;
+globalThis.__testApi = {
+  generateAiLines,
+  handleAiPick,
+  randomInt,
+  getBetIssue,
+  handleBet,
+  repairHistoryIssueMismatches,
+  sampleConsecutivePattern,
+  sampleRunZone,
+  classifyConsecutiveReds,
+  matchesConsecutiveTarget,
+  generateRedsForTarget,
+  state,
+};`;
 
   Object.assign(context, overrides);
   vm.runInNewContext(source, context);
@@ -59,7 +72,6 @@ function seededCrypto(seed = 12345) {
 
 function assertStrategy(lines) {
   assert.equal(lines.length, 3);
-  assert.equal(new Set(lines.flatMap((line) => Array.from(line.reds))).size, 18);
   assert.equal(new Set(lines.map((line) => line.blue)).size, 3);
   for (const line of lines) {
     assert.equal(line.reds.length, 6);
@@ -78,21 +90,24 @@ test("draw history loads the same-origin synced data before external sources", (
   assert.match(APP_JS, /const DATA_SOURCES = \[LOCAL_DATA_URL, DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFFICIAL_DATA_URL\];/);
 });
 
-test("pick button generates disjoint reds and distinct blues across 1000 batches", () => {
-  const { handleAiPick, state } = loadGeneratorApi({ crypto: seededCrypto() });
-  const seenReds = [new Set(), new Set()];
+test("pick button generates valid probability-shaped reds and distinct blues across 1000 batches", () => {
+  const { handleAiPick, classifyConsecutiveReds, state } = loadGeneratorApi({ crypto: seededCrypto() });
+  const seenPatterns = new Set();
   const seenBlues = [new Set(), new Set()];
   for (let attempt = 0; attempt < 1000; attempt += 1) {
     handleAiPick();
     assertStrategy(state.currentLines);
     assert.equal(state.generatedLine, state.currentLines[0]);
     state.currentLines.slice(0, 2).forEach((line, index) => {
-      line.reds.forEach((num) => seenReds[index].add(num));
+      seenPatterns.add(classifyConsecutiveReds(line.reds).patternId);
       seenBlues[index].add(line.blue);
     });
   }
-  assert.deepEqual(seenReds.map((set) => set.size), [27, 27]);
   assert.deepEqual(seenBlues.map((set) => set.size), [15, 15]);
+  assert.ok(seenPatterns.has("none"));
+  assert.ok(seenPatterns.has("onePair"));
+  assert.ok(seenPatterns.has("twoPairs"));
+  assert.ok(seenPatterns.has("oneTriple"));
 });
 
 test("generation does not depend on past draws or alter saved history", () => {
@@ -108,22 +123,63 @@ test("generation does not depend on past draws or alter saved history", () => {
   assert.deepEqual(right.state.history, history);
 });
 
-test("valid consecutive reds and birthday-only lines are not filtered out", () => {
-  const values = [
-    ...Array.from({ length: 26 }, (_, index) => 26 - index),
-    ...Array.from({ length: 14 }, (_, index) => 14 - index),
-  ];
-  const { generateAiLines } = loadGeneratorApi({
-    crypto: { getRandomValues(array) {
-      assert.ok(values.length > 0, "generation should not retry based on number patterns");
-      array[0] = values.shift();
-      return array;
-    } },
+test("pattern weights use the requested ten-thousandth boundaries", () => {
+  const rolls = [1, 3486, 7913, 8961, 8984, 9895, 9995];
+  const expected = ["none", "onePair", "twoPairs", "threePairs", "oneTriple", "oneQuad", "oneQuint"];
+  rolls.forEach((roll, index) => {
+    const { sampleConsecutivePattern } = loadGeneratorApi({
+      crypto: { getRandomValues(values) { values[0] = roll - 1; } },
+    });
+    assert.equal(sampleConsecutivePattern().id, expected[index]);
   });
-  const lines = generateAiLines();
-  assertStrategy(lines);
-  assert.deepEqual(Array.from(lines[0].reds), [2, 3, 4, 5, 6, 7]);
-  assert.deepEqual(Array.from(lines[1].reds), [8, 9, 10, 11, 12, 13]);
+});
+
+test("run zones use the exact historical occurrence weights", () => {
+  const cases = [
+    [2, [1, 739, 1439, 2170], ["low", "mid", "high", "cross"]],
+    [3, [1, 85, 191, 273], ["low", "mid", "high", "cross"]],
+    [4, [1, 10, 18, 27], ["low", "mid", "high", "cross"]],
+    [5, [1, 2], ["low", "cross"]],
+  ];
+  cases.forEach(([runLength, rolls, expected]) => {
+    rolls.forEach((roll, index) => {
+      const { sampleRunZone } = loadGeneratorApi({
+        crypto: { getRandomValues(values) { values[0] = roll - 1; } },
+      });
+      assert.equal(sampleRunZone(runLength), expected[index]);
+    });
+  });
+});
+
+test("red construction honors every supported consecutive structure", () => {
+  const api = loadGeneratorApi({ crypto: seededCrypto(7000) });
+  const targets = [
+    { patternId: "none", runLength: 1, runCount: 0, zones: [] },
+    { patternId: "onePair", runLength: 2, runCount: 1, zones: ["low"] },
+    { patternId: "twoPairs", runLength: 2, runCount: 2, zones: ["low", "mid"] },
+    { patternId: "threePairs", runLength: 2, runCount: 3, zones: ["low", "mid", "high"] },
+    { patternId: "oneTriple", runLength: 3, runCount: 1, zones: ["cross"] },
+    { patternId: "oneQuad", runLength: 4, runCount: 1, zones: ["mid"] },
+    { patternId: "oneQuint", runLength: 5, runCount: 1, zones: ["cross"] },
+  ];
+  targets.forEach((target) => {
+    const reds = api.generateRedsForTarget(target);
+    assert.ok(reds, `failed to construct ${target.patternId}`);
+    assert.equal(api.matchesConsecutiveTarget(reds, target), true);
+  });
+});
+
+test("red construction avoids other lines first and relaxes only when required", () => {
+  const blocked = [1, 14, 17, 18, 22, 26];
+  const api = loadGeneratorApi({ crypto: seededCrypto(9000) });
+  const feasible = { patternId: "onePair", runLength: 2, runCount: 1, zones: ["low"] };
+  const disjoint = api.generateRedsForTarget(feasible, blocked);
+  assert.equal(disjoint.filter((num) => blocked.includes(num)).length, 0);
+
+  const forced = { patternId: "oneQuad", runLength: 4, runCount: 1, zones: ["mid"] };
+  const relaxed = api.generateRedsForTarget(forced, blocked);
+  assert.ok(relaxed.filter((num) => blocked.includes(num)).length >= 1);
+  assert.equal(api.matchesConsecutiveTarget(relaxed, forced), true);
 });
 
 test("integer sampling rejects the partial crypto bucket", () => {
