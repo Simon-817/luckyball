@@ -4,6 +4,7 @@ import html
 import json
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -18,6 +19,7 @@ OFFICIAL_URL = (
     "&pageNo=1&pageSize=100&week=&systemType=PC"
 )
 HTML_URL = "https://www.17500.cn/kj/list-ssq.html"
+LIVE_HTML_URL = "https://www.8300.cn/kjhhis/6/100.html"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36",
     "Accept": "application/json,text/html;q=0.9,*/*;q=0.8",
@@ -115,12 +117,46 @@ def parse_17500_rows(page):
     return rows
 
 
+def parse_8300_rows(page):
+    rows = []
+    for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", html.unescape(page), flags=re.I | re.S):
+        cells = re.findall(r"<td\b[^>]*>(.*?)</td>", row, flags=re.I | re.S)
+        if len(cells) < 3:
+            continue
+        issue_match = re.search(r"\d{7}", cells[0])
+        reds = [
+            pad(match.group(1))
+            for match in re.finditer(
+                r"<span\b[^>]*class=[\"'][^\"']*\bball\b[^\"']*[\"'][^>]*>(\d{1,2})</span>",
+                cells[2], flags=re.I,
+            )
+        ]
+        blue_match = re.search(
+            r"<span\b[^>]*class=[\"'][^\"']*\bblue\b[^\"']*[\"'][^>]*>(\d{1,2})</span>",
+            cells[2], flags=re.I,
+        )
+        item = {
+            "issue": issue_match.group(0) if issue_match else "",
+            "date": normalize_date(cells[1]),
+            "red_balls": reds,
+            "blue_ball": pad(blue_match.group(1)) if blue_match else "",
+            "prizegrades": [],
+        }
+        if valid_row(item) and len(set(reds)) == 6:
+            rows.append(item)
+    return rows
+
+
 def fetch_official_rows():
     return normalize_official_rows(json.loads(fetch_text(OFFICIAL_URL)))
 
 
 def fetch_html_rows():
     return parse_17500_rows(fetch_text(HTML_URL))
+
+
+def fetch_live_html_rows():
+    return parse_8300_rows(fetch_text(LIVE_HTML_URL))
 
 
 def load_existing():
@@ -139,7 +175,12 @@ def merge_rows(*row_sets):
         for row in rows:
             if valid_row(row):
                 issue = str(row["issue"])
-                by_issue[issue] = {**by_issue.get(issue, {}), **row}
+                previous = by_issue.get(issue, {})
+                combined = {**previous, **row}
+                for field in ("poolMoney", "prizegrades"):
+                    if not row.get(field) and previous.get(field):
+                        combined[field] = previous[field]
+                by_issue[issue] = combined
     return sorted(by_issue.values(), key=lambda row: int(row["issue"]), reverse=True)
 
 
@@ -175,11 +216,25 @@ def expected_issue_from_existing(existing_rows, now=None):
 def fetch_all_rows():
     rows = []
     errors = []
-    for fetcher in (fetch_official_rows, fetch_html_rows):
-        try:
-            rows.extend(fetcher())
-        except Exception as error:
-            errors.append(f"{fetcher.__name__}: {error}")
+    sources = (
+        ("17500.cn", fetch_html_rows),
+        ("8300.cn", fetch_live_html_rows),
+        ("中国福彩官网", fetch_official_rows),
+    )
+    results = {}
+    with ThreadPoolExecutor(max_workers=len(sources)) as executor:
+        futures = {executor.submit(fetcher): name for name, fetcher in sources}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                fetched = future.result()
+                if not fetched:
+                    errors.append(f"{name}: no valid draw rows")
+                results[name] = fetched
+            except Exception as error:
+                errors.append(f"{name}: {error}")
+    for name, _ in sources:
+        rows = merge_rows(rows, results.get(name, []))
     if errors:
         print("Source warnings: " + "; ".join(errors))
     return rows
@@ -188,13 +243,15 @@ def fetch_all_rows():
 def sync_until_issue_available(fetch_rows, expected_issue, max_attempts=180, interval_seconds=60):
     rows = []
     for attempt in range(1, max_attempts + 1):
+        started_at = time.monotonic()
         rows = merge_rows(fetch_rows())
         found = any(str(row.get("issue")) == str(expected_issue) for row in rows)
         if found:
             return rows, True
         if attempt < max_attempts and interval_seconds:
-            print(f"Expected issue {expected_issue} unavailable; retrying in {interval_seconds}s ({attempt}/{max_attempts})")
-            time.sleep(interval_seconds)
+            delay = max(0, interval_seconds - (time.monotonic() - started_at))
+            print(f"Expected issue {expected_issue} unavailable; retrying in {delay:.0f}s ({attempt}/{max_attempts})")
+            time.sleep(delay)
     return rows, False
 
 
@@ -227,7 +284,7 @@ def main():
             interval_seconds=args.interval_seconds,
         )
         rows = merge_rows(existing, fetched)
-        write_payload(rows, "中国福利彩票发行管理中心、17500.cn")
+        write_payload(rows, "中国福彩官网优先，8300.cn、17500.cn 备用")
         if not found:
             raise RuntimeError(f"Expected issue {expected_issue} was not available")
         return
@@ -235,7 +292,7 @@ def main():
     rows = merge_rows(existing, fetch_all_rows())
     if not rows:
         raise RuntimeError("No lottery draw rows could be synchronized")
-    write_payload(rows, "中国福利彩票发行管理中心、17500.cn")
+    write_payload(rows, "中国福彩官网优先，8300.cn、17500.cn 备用")
 
 
 if __name__ == "__main__":

@@ -53,6 +53,8 @@ globalThis.__testApi = {
   classifyConsecutiveReds,
   matchesConsecutiveTarget,
   generateRedsForTarget,
+  shouldRefreshPendingDraw,
+  mergeDrawSets,
   state,
 };`;
 
@@ -85,9 +87,35 @@ function assertStrategy(lines) {
   assert.equal(lines[2].type, "fixed");
 }
 
-test("draw history loads the same-origin synced data before external sources", () => {
+test("draw history prioritizes the live CORS-enabled source over cached history", () => {
   assert.match(APP_JS, /const LOCAL_DATA_URL = "\.\/data\/lottery_history\.json";/);
-  assert.match(APP_JS, /const DATA_SOURCES = \[LOCAL_DATA_URL, DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFFICIAL_DATA_URL\];/);
+  assert.match(APP_JS, /const DATA_SOURCES = \[LOCAL_DATA_URL, DATA_URL, CDN_DATA_URL, LIVE_HTML_DATA_URL\];/);
+  assert.match(APP_JS, /const REFRESH_DATA_SOURCES = \[LOCAL_DATA_URL, LIVE_HTML_DATA_URL\];/);
+});
+
+test("new draw balls take precedence without discarding synced prize metadata", () => {
+  const { mergeDrawSets } = loadGeneratorApi();
+  const old = { issue: "2026113", date: "2026-09-29", reds: [1, 2, 3, 4, 5, 6], blue: 7,
+    poolMoney: 321000000, prizes: { 一等奖: 5000000 } };
+  const live = { issue: "2026113", date: "2026-09-29", reds: [2, 4, 6, 8, 10, 12], blue: 9,
+    poolMoney: 0, prizes: {} };
+  const [merged] = mergeDrawSets([[old], [live]]);
+  assert.deepEqual(Array.from(merged.reds), live.reds);
+  assert.equal(merged.blue, 9);
+  assert.equal(merged.poolMoney, old.poolMoney);
+  assert.equal(merged.prizes.一等奖, 5000000);
+});
+
+test("pending results poll from 21:16, stop once the expected draw is present", () => {
+  const { shouldRefreshPendingDraw, state } = loadGeneratorApi();
+  state.latestDraw = { issue: "2026112", date: "2026-09-27" };
+  assert.equal(shouldRefreshPendingDraw(Date.parse("2026-09-29T13:15:59Z")), false);
+  assert.equal(shouldRefreshPendingDraw(Date.parse("2026-09-29T13:16:00Z")), true);
+  state.loadingDraw = true;
+  assert.equal(shouldRefreshPendingDraw(Date.parse("2026-09-29T13:16:30Z")), false);
+  state.loadingDraw = false;
+  state.latestDraw = { issue: "2026113", date: "2026-09-29" };
+  assert.equal(shouldRefreshPendingDraw(Date.parse("2026-09-29T13:17:00Z")), false);
 });
 
 test("pick button generates valid probability-shaped reds and distinct blues across 1000 batches", () => {

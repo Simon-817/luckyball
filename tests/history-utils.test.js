@@ -188,3 +188,15 @@ test("html draw list rows are parsed into normalized draw records", () => {
     prizes: {},
   }]);
 });
+
+test("8300 live draw rows are parsed without confusing sales and prize cells for balls", () => {
+  const html = `<table><tbody><tr>
+    <td>2026113期</td><td>2026-09-29</td>
+    <td><span class="ball">01</span><span class="ball">04</span><span class="ball">11</span>
+      <span class="ball">12</span><span class="ball">17</span><span class="ball">29</span>
+      + <span class="blue">11</span></td><td>3.51亿</td><td>6注</td>
+  </tr></tbody></table>`;
+  assert.deepEqual(parseHtmlDraws(html), [{
+    issue: "2026113", date: "2026-09-29", reds: [1, 4, 11, 12, 17, 29], blue: 11, prizes: {},
+  }]);
+});

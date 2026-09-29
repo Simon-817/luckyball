@@ -90,11 +90,11 @@
         if (cells.length < 3) return null;
         const issue = String(cells[0].textContent || "").match(/\d{7}/)?.[0] || "";
         const date = normalizeDate(cells[1].textContent);
-        const reds = [...cells[2].querySelectorAll(".rbl, .rb")]
+        const reds = [...cells[2].querySelectorAll(".rbl, .rb, span.ball")]
           .map((ball) => toNumber(ball.textContent))
           .filter((num) => num >= 1 && num <= 33)
           .slice(0, 6);
-        const blue = toNumber(cells[2].querySelector(".bbl, .bb")?.textContent || "");
+        const blue = toNumber(cells[2].querySelector(".bbl, .bb, span.blue")?.textContent || "");
         return issue && date && reds.length === 6 && blue >= 1 && blue <= 16
           ? { issue, date, reds, blue, prizes: {} }
           : null;
@@ -110,11 +110,11 @@
         if (cells.length < 3) return null;
         const issue = cells[0].match(/\d{7}/)?.[0] || "";
         const date = normalizeDate(cells[1]);
-        const reds = [...cells[2].matchAll(/<b\b[^>]*class=["'][^"']*\brbl\b[^"']*["'][^>]*>(\d{1,2})<\/b>/gi)]
+        const reds = [...cells[2].matchAll(/<(?:b|span)\b[^>]*class=["'][^"']*\b(?:rbl|rb|ball)\b[^"']*["'][^>]*>(\d{1,2})<\/(?:b|span)>/gi)]
           .map((match) => toNumber(match[1]))
           .filter((num) => num >= 1 && num <= 33)
           .slice(0, 6);
-        const blue = toNumber(cells[2].match(/<b\b[^>]*class=["'][^"']*\bbbl\b[^"']*["'][^>]*>(\d{1,2})<\/b>/i)?.[1] || "");
+        const blue = toNumber(cells[2].match(/<(?:b|span)\b[^>]*class=["'][^"']*\b(?:bbl|bb|blue)\b[^"']*["'][^>]*>(\d{1,2})<\/(?:b|span)>/i)?.[1] || "");
         return issue && date && reds.length === 6 && blue >= 1 && blue <= 16
           ? { issue, date, reds, blue, prizes: {} }
           : null;

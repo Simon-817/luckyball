@@ -18,10 +18,10 @@ const DATA_URL =
   "https://raw.githubusercontent.com/sinyu1012/Double-Color-Ball-AI/main/data/lottery_history.json";
 const CDN_DATA_URL =
   "https://cdn.jsdelivr.net/gh/sinyu1012/Double-Color-Ball-AI@main/data/lottery_history.json";
-const OFFICIAL_DATA_URL =
-  "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=&issueStart=&issueEnd=&dayStart=&dayEnd=&pageNo=1&pageSize=30&week=&systemType=PC";
-const HTML_DATA_URL = "https://www.17500.cn/kj/list-ssq.html";
-const DATA_SOURCES = [LOCAL_DATA_URL, DATA_URL, CDN_DATA_URL, HTML_DATA_URL, OFFICIAL_DATA_URL];
+const LIVE_HTML_DATA_URL = "https://www.8300.cn/kjhhis/6/100.html";
+const DATA_SOURCES = [LOCAL_DATA_URL, DATA_URL, CDN_DATA_URL, LIVE_HTML_DATA_URL];
+const REFRESH_DATA_SOURCES = [LOCAL_DATA_URL, LIVE_HTML_DATA_URL];
+const DRAW_REFRESH_INTERVAL_MS = 30_000;
 const PRIZE_DATA_URL = "./data/lottery_prizes.json";
 const CURRENT_PICK_COUNT = 3;
 const FIXED_THIRD_LINE = { reds: [1, 14, 17, 18, 22, 26], blue: 1 };
@@ -106,6 +106,7 @@ const state = {
   historyObserver: null,
   loadingDraw: false,
   countdownTimer: null,
+  drawRefreshTimer: null,
 };
 
 const els = {
@@ -198,7 +199,9 @@ function normalizeHistory(payload, options = {}) {
 
   const draws = rows
     .map(normalizeDraw)
-    .filter((draw) => draw.reds.length === 6 && draw.blue >= BLUE_MIN && draw.blue <= BLUE_MAX)
+    .filter((draw) => /^\d{7}$/.test(draw.issue) && draw.date &&
+      draw.reds.length === 6 && new Set(draw.reds).size === 6 &&
+      draw.blue >= BLUE_MIN && draw.blue <= BLUE_MAX)
     .sort((a, b) => Number(b.issue) - Number(a.issue));
 
   if (requireWindow && draws.length < HISTORY_WINDOW) throw new Error("最近30期数据不足");
@@ -224,7 +227,14 @@ function mergeDrawSets(drawSets) {
   const byIssue = new Map();
 
   drawSets.flat().forEach((draw) => {
-    if (draw.issue) byIssue.set(draw.issue, draw);
+    if (!draw.issue) return;
+    const previous = byIssue.get(draw.issue);
+    byIssue.set(draw.issue, previous ? {
+      ...previous,
+      ...draw,
+      poolMoney: draw.poolMoney || previous.poolMoney,
+      prizes: { ...previous.prizes, ...draw.prizes },
+    } : draw);
   });
 
   return [...byIssue.values()].sort((a, b) => Number(b.issue) - Number(a.issue));
@@ -243,11 +253,11 @@ async function fetchDataSource(url) {
   }
 }
 
-async function fetchLotteryHistory() {
+async function fetchLotteryHistory(sources = DATA_SOURCES) {
   const fallbackDraws = normalizeHistory(FALLBACK_DRAWS);
-  const settled = await Promise.allSettled(DATA_SOURCES.map(fetchDataSource));
+  const settled = await Promise.allSettled(sources.map(fetchDataSource));
   const remoteDrawSets = settled.map((result) => (result.status === "fulfilled" ? result.value : []));
-  const merged = mergeDrawSets([fallbackDraws, ...remoteDrawSets]);
+  const merged = mergeDrawSets([fallbackDraws, state.draws, ...remoteDrawSets]);
 
   if (merged.length < HISTORY_WINDOW) throw new Error("可用开奖记录不足");
   return merged;
@@ -372,6 +382,18 @@ function countElapsedDrawSlotsAfterLatest(targetTimestamp = Date.now()) {
 function getExpectedLatestIssue(timestamp = Date.now()) {
   const latestIssue = Number(state.latestDraw?.issue || normalizeDraw(FALLBACK_DRAWS[0]).issue);
   return String(latestIssue + countElapsedDrawSlotsAfterLatest(timestamp));
+}
+
+function shouldRefreshPendingDraw(timestamp = Date.now()) {
+  if (state.loadingDraw || !state.latestDraw ||
+      Number(getExpectedLatestIssue(timestamp)) <= Number(state.latestDraw.issue)) return false;
+  const now = chinaParts(timestamp);
+  return !(isDrawWeekday(now.week) && now.hour === 21 && now.minute === 15);
+}
+
+function refreshPendingDraw() {
+  if (document.visibilityState === "hidden" || !shouldRefreshPendingDraw()) return;
+  loadData({ poll: true });
 }
 
 function getBetIssue(timestamp = Date.now()) {
@@ -929,25 +951,26 @@ function closeHistoryFilterFromOutside(event) {
   if (!els.historyFilter.contains(event.target)) setHistoryFilterOpen(false);
 }
 
-async function loadData() {
+async function loadData({ poll = false } = {}) {
+  if (state.loadingDraw) return;
   state.loadingDraw = true;
   renderLatestDraw();
-  try {
-    state.draws = await fetchLotteryHistory();
-  } catch {
+  const [drawResult, prizeResult] = await Promise.allSettled([
+    fetchLotteryHistory(poll ? REFRESH_DATA_SOURCES : DATA_SOURCES),
+    fetchPrizeHistory(),
+  ]);
+  if (drawResult.status === "fulfilled") {
+    state.draws = drawResult.value;
+  } else if (!state.draws.length) {
     state.draws = normalizeHistory(FALLBACK_DRAWS);
-  } finally {
-    state.loadingDraw = false;
   }
-
-  try {
-    state.draws = HistoryUtils.mergePrizeData(state.draws, await fetchPrizeHistory());
-  } catch {
-    // Fixed prize tiers still calculate locally; floating tiers stay explicitly unresolved.
+  if (prizeResult.status === "fulfilled") {
+    state.draws = HistoryUtils.mergePrizeData(state.draws, prizeResult.value);
   }
 
   state.latestDraw = state.draws[0];
   repairHistoryIssueMismatches();
+  state.loadingDraw = false;
   renderAll();
 }
 
@@ -966,6 +989,7 @@ function bindEvents() {
   els.historyFilterOptions.forEach((option) => option.addEventListener("click", handleHistoryFilterOption));
   els.historyFilterMenu.addEventListener("keydown", handleHistoryFilterKeydown);
   document.addEventListener("click", closeHistoryFilterFromOutside);
+  document.addEventListener("visibilitychange", refreshPendingDraw);
 }
 
 bindEvents();
@@ -973,3 +997,7 @@ loadHistory();
 renderAll();
 loadData();
 state.countdownTimer = setInterval(renderDateAndCountdown, 1000);
+setTimeout(() => {
+  refreshPendingDraw();
+  state.drawRefreshTimer = setInterval(refreshPendingDraw, DRAW_REFRESH_INTERVAL_MS);
+}, DRAW_REFRESH_INTERVAL_MS - (Date.now() % DRAW_REFRESH_INTERVAL_MS));
